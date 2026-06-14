@@ -1,8 +1,6 @@
 use std::{io::{Error, ErrorKind::InvalidData, Read, Write}, sync::Mutex};
 use byteorder::{ByteOrder, LittleEndian};
 
-// TODO-DW : Look into making T embeddedio::Read and embeddedio::Write instead of SerialPort
-
 // TODO-DW : Add support for direction control?
 pub struct Lx16aBus<T: Read+Write> {
     port: Mutex<T>,
@@ -87,6 +85,19 @@ impl<'a, T: Read+Write> Servo<'a, T> {
 
         Ok(())
     }
+
+    #[allow(unused)] 
+    pub fn read_move_time(&self) -> Result<(i16, u16), Error> {
+        const SERVO_MOVE_TIME_READ: u8 = 2;
+
+        let mut rx_buf = [0; 32];
+        let params = [];
+        let response = self.read(self.id, SERVO_MOVE_TIME_READ, &params, &mut rx_buf, 4)?;
+
+        let pos = LittleEndian::read_i16(&response[0..2]);
+        let time_ms = LittleEndian::read_u16(&response[2..4]);
+        Ok((pos, time_ms))
+    }
     
     pub fn move_wait(&self, pos: i16, time_ms: u16) -> Result<(), Error> {
         const SERVO_MOVE_TIME_WAIT_WRITE: u8 = 7;
@@ -99,6 +110,20 @@ impl<'a, T: Read+Write> Servo<'a, T> {
         Ok(())
     }
 
+    // read_move_wait
+    #[allow(unused)] 
+    pub fn read_move_wait(&self) -> Result<(i16, u16), Error> {
+        const SERVO_MOVE_TIME_WAIT_READ: u8 = 8;
+
+        let mut rx_buf = [0; 32];
+        let params = [];
+        let response = self.read(self.id, SERVO_MOVE_TIME_WAIT_READ, &params, &mut rx_buf, 4)?;
+
+        let pos = LittleEndian::read_i16(&response[0..2]);
+        let time_ms = LittleEndian::read_u16(&response[2..4]);
+        Ok((pos, time_ms))
+    }
+
     pub fn move_start(&self) -> Result<(), Error> {
         const SERVO_MOVE_START: u8 = 11;
 
@@ -108,20 +133,52 @@ impl<'a, T: Read+Write> Servo<'a, T> {
         Ok(())
     }
 
+    #[allow(unused)] 
+    pub fn move_stop(&self) -> Result<(), Error> {
+        const SERVO_MOVE_STOP: u8 = 12;
+
+        let params = [];
+        self.write(self.id, SERVO_MOVE_STOP, &params)?;
+
+        Ok(())
+    }
+
+    #[allow(unused)]
+    pub fn set_servo_id(&self, id: u8) -> Result<(), Error> {
+        const SERVO_ID_WRITE: u8 = 13;
+
+        let params = [id];
+        self.write(self.id, SERVO_ID_WRITE, &params)?;
+
+        Ok(())
+    }
+
     pub fn read_servo_id(&self) -> Result<u8, Error> {
         const SERVO_ID_READ: u8 = 14;
 
         let mut rx_buf = [0; 32];
-        let response = self.read(self.id, SERVO_ID_READ, &[], &mut rx_buf, 1)?;
+        let params = [];
+        let response = self.read(self.id, SERVO_ID_READ, &params, &mut rx_buf, 1)?;
 
         Ok(response[0])
     }
+
+    // TODO-DW : set_angle_offset / SERVO_ANGLE_OFFSET_ADJUST, 17
+    // TODO-DW : save_angle_offset / SERVO_ANGLE_OFFSET_WRITE, 18
+    // TODO-DW : read_angle_offset / SERVO_ANGLE_OFFSET_READ, 19
+    // TODO-DW : set_angle_limit / SERVO_ANGLE_LIMIT_WRITE, 20
+    // TODO-DW : read_angle_limit / SERVO_ANGLE_LIMIT_READ, 21
+    // TODO-DW : set_vin_limit_mv / SERVO_VIN_LIMIT_WRITE, 22
+    // TODO-DW : read_vin_limit_mv / SERVO_VIN_LIMIT_READ, 23
+    // TODO-DW : set_temp_limit_c / SERVO_TEMP_MAX_LIMIT_WRITE, 24
+    // TODO-DW : read_temp_limit_c / SERVO_TEMP_MAX_LIMIT_READ, 25
 
     pub fn read_temp_c(&self) -> Result<i8, Error> {
         const SERVO_TEMP_READ: u8 = 26;
 
         let mut rx_buf = [0; 32];
-        let response = self.read(self.id, SERVO_TEMP_READ, &[], &mut rx_buf, 1)?;
+        let params = [];
+        let response = self.read(self.id, SERVO_TEMP_READ, &params, &mut rx_buf, 1)?;
 
         Ok(response[0] as i8)
     }
@@ -130,7 +187,8 @@ impl<'a, T: Read+Write> Servo<'a, T> {
         const SERVO_VIN_READ: u8 = 27;
 
         let mut rx_buf = [0; 32];
-        let response = self.read(self.id, SERVO_VIN_READ, &[], &mut rx_buf, 2)?;
+        let params = [];
+        let response = self.read(self.id, SERVO_VIN_READ, &params, &mut rx_buf, 2)?;
 
         Ok(LittleEndian::read_i16(&response[0..2]))
     }
@@ -139,10 +197,20 @@ impl<'a, T: Read+Write> Servo<'a, T> {
         const SERVO_POS_READ: u8 = 28;
 
         let mut rx_buf = [0; 32];
-        let response = self.read(self.id, SERVO_POS_READ, &[], &mut rx_buf, 2)?;
+        let params = [];
+        let response = self.read(self.id, SERVO_POS_READ, &params, &mut rx_buf, 2)?;
 
         Ok(LittleEndian::read_i16(&response[0..2]))
     }
+
+    // TODO-DW : set_mode / SERVO_OR_MOTOR_MODE_WRITE, 29  (Create enum of SERVO, SPEED(speed))
+    // TODO-DW : get_mode / SERVO_OR_MOTOR_MODE_READ, 30
+    // TODO-DW : set_powered / SERVO_LOAD_OR_UNLOAD_WRITE, 31
+    // TODO-DW : read_powered / SERVO_LOAD_OR_UNLOAD_READ, 32
+    // TODO-DW : set_led / SERVO_LED_CTRL_WRITE, 33
+    // TODO-DW : read_led / SERVO_LED_CTRL_READ, 34
+    // TODO-DW : set_led_err / SERVO_LED_ERROR_WRITE, 35
+    // TODO-DW : read_led_err / SERVO_LED_ERROR_READ, 36
 
     // --- Utility methods --------------------------------------------
     
