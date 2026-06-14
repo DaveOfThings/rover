@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 anyhow = "1.0.102"
+byteorder = "1.5.0"
 io = "0.0.2"
 lx16a-servo = "0.2.1"
 serialport = "4.9.0"
