@@ -1,7 +1,11 @@
-mod lx_16a;
+mod rover;
+mod drive;
 
 use std::time::Duration;
 use lx_16a::Lx16aBus;
+use std::thread;
+
+use rover::Rover;
 
 const SERIAL_PORT: &str = "/dev/ttyUSB0";
 const BAUD: u32 = 115200;
@@ -11,18 +15,14 @@ const RIGHT_BACK_STEER_ID: u8 = 4;
 const LEFT_BACK_STEER_ID: u8 = 6;
 const LEFT_FRONT_STEER_ID: u8 = 9;
 
-// const RIGHT_FRONT_STRAIGHT: u32 = 397;
-// const RIGHT_BACK_STRAIGHT: u32 = 509;
-// const LEFT_BACK_STRAIGHT: u32 = 447;
-// const LEFT_FRONT_STRAIGHT: u32 = 564;
 
 fn main() -> anyhow::Result<()> {
-    println!("Hello, world!");
 
     let port = serialport::new(SERIAL_PORT, BAUD)
         .timeout(Duration::from_millis(10))
         .open()
         .expect("Failed to open port");
+
     let lx16a_bus = Lx16aBus::new(port);
 
     let right_front = lx16a_bus.servo(RIGHT_FRONT_STEER_ID);
@@ -30,20 +30,44 @@ fn main() -> anyhow::Result<()> {
     let left_back   = lx16a_bus.servo(LEFT_BACK_STEER_ID);
     let left_front  = lx16a_bus.servo(LEFT_FRONT_STEER_ID);
     
+    println!("Hello LX-16A world.");
     for servo in [&right_front, &right_back, &left_back, &left_front] {
     	let read_id = servo.read_servo_id().unwrap();
-        let temp = servo.read_temp_c().unwrap();
-        let pos = servo.read_pos().unwrap();
-        let vin_mv = servo.read_vin_mv().unwrap();
-        println!("Servo {}:", servo.get_id());
-        println!("    id :{read_id}, temp: {temp}, position: {pos}, vin [mv]: {vin_mv}");
+        println!("id : {read_id}");
+    }
+
+    for servo in [&right_front, &right_back, &left_back, &left_front] {
+    	// let read_id = servo.read_servo_id().unwrap();
+        // let temp = servo.read_temp_c().unwrap();
+        // let pos = servo.read_pos().unwrap();
+        // let vin_mv = servo.read_vin_mv().unwrap();
+        // println!("Servo {}:", servo.get_id());
+        // println!("    id :{read_id}, temp: {temp}, position: {pos}, vin [mv]: {vin_mv}");
 
         // Move to position 500 over 1 sec.
         servo.move_wait(500, 1000)?;
     }
 
     // start the move
+    println!("Powering on.");
+    lx16a_bus.broadcast().set_powered(true)?;
     lx16a_bus.broadcast().move_start()?;
+    println!("Moving.");
+
+    // thread::sleep(Duration::from_millis(1100));
+
+    let mut rover = Rover::new(&lx16a_bus);
+    rover.wiggle();
+    rover.drive_turn(0.1, 1000.0)?;
+
+    thread::sleep(Duration::from_millis(5000));
+    rover.drive(0.0)?;
+
+    lx16a_bus.broadcast().set_powered(false)?;
+    println!("Powered off.");
+
+    
+    thread::sleep(Duration::from_millis(100));
 
     Ok(())
 }
