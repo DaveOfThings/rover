@@ -58,7 +58,7 @@ fn main() -> anyhow::Result<()> {
 
     let mut rover = Rover::new(&lx16a_bus);
     rover.wiggle();
-    rover.drive_turn(0.1, 1000.0)?;
+    rover.drive_turn(0.2, -std::f64::consts::PI/10.0)?;  // PI/2 radians (1/4 turn) in 5 seconds.
 
     thread::sleep(Duration::from_millis(5000));
     rover.drive(0.0)?;

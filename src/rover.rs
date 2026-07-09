@@ -20,17 +20,17 @@ impl<'a, T: Read+Write> Rover<'a, T> {
         let return_id = seven.read_servo_id().unwrap();
         println!("Seven reports it is {return_id}");
         println!("  temp: {}", seven.read_temp_c().unwrap());
-        println!("  voltage: {}", seven.read_vin_mv().unwrap());
+        println!("  voltage: {}", 0.001 * seven.read_vin_mv().unwrap() as f64);
     }
 
-    pub fn drive(&mut self, speed_mps: f32) -> Result<(), Error>  {
-        self.drive_turn(speed_mps, crate::drive::GO_STRAIGHT)?;
+    pub fn drive(&mut self, speed_mps: f64) -> Result<(), Error>  {
+        self.drive_turn(speed_mps, 0.0)?;
 
         Ok(())
     }
 
-    pub fn drive_turn(&mut self, speed_mps: f32, turn_radius_m: f32) -> Result<(), Error> {
-        self.drive.set_speed(speed_mps, turn_radius_m)?;
+    pub fn drive_turn(&mut self, linear_speed_mps: f64, rotation_speed_rps: f64) -> Result<(), Error> {
+        self.drive.set_speed(linear_speed_mps, rotation_speed_rps)?;
 
         Ok(())
     }
