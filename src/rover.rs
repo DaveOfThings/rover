@@ -28,7 +28,7 @@ impl<'a, T: Read+Write> Rover<'a, T> {
     }
 
     pub async fn run(&self) {
-        // TODO
+        // TODO : Periodically check with the link
     }
 
     /*
@@ -48,7 +48,7 @@ impl<'a, T: Read+Write> Rover<'a, T> {
     }
     */
 
-    pub fn drive_turn(&mut self, linear_speed_mps: f64, rotation_speed_rps: f64) -> Result<(), Error> {
+    pub fn cmd_vel(&mut self, linear_speed_mps: f64, rotation_speed_rps: f64) -> Result<(), Error> {
         self.drive.set_speed(linear_speed_mps, rotation_speed_rps)?;
 
         Ok(())
