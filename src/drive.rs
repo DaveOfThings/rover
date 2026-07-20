@@ -141,14 +141,22 @@ impl<'a, T: Read+Write> WheelModule<'a, T> {
 }
 
 pub struct Drive<'a, T: Write+Read> {
-    // bus: &'a Lx16aBus<T>,
+    bus: &'a Lx16aBus<T>,
     wheels: [WheelModule<'a, T>; 6], // 0 is front right, numbers increase clockwise
     // linear_speed_mps: f64,
     // rotation_speed_rps: f64,
 }
 
 impl<'a, T: Read+Write> Drive<'a, T> {
-    pub fn new(bus: &'a Lx16aBus<T>) -> Drive<'a, T> {
+    pub fn new() -> Drive<'a, T> {
+
+        let port = serialport::new(SERIAL_PORT, BAUD)
+            .timeout(Duration::from_millis(10))
+            .open()
+            .expect("Failed to open port");
+
+        let lx16a_bus = Lx16aBus::new(port);
+
         // Create Lx16a servos and organize them into units.
         // Wheels are ordered clockwise from front right.
         let wheels = [
@@ -184,7 +192,7 @@ impl<'a, T: Read+Write> Drive<'a, T> {
                 false),
             ];
 
-        Drive { wheels, /* linear_speed_mps: 0.0, rotation_speed_rps: 0.0 */ }
+        Drive { bus: lx16a_bus, wheels, /* linear_speed_mps: 0.0, rotation_speed_rps: 0.0 */ }
     }
 
     // Set speed and turning radius.
@@ -211,6 +219,11 @@ impl<'a, T: Read+Write> Drive<'a, T> {
         });
 
         retval
+    }
+
+    
+    pub async fn run(&self) {
+        // TODO
     }
 
     // TODO-DW : Implement some drive functionality

@@ -1,6 +1,8 @@
 mod rover;
 mod drive;
+mod control_link;
 
+use crate::ControlLink;
 use std::time::Duration;
 use lx_16a::Lx16aBus;
 use std::thread;
@@ -16,6 +18,7 @@ const LEFT_BACK_STEER_ID: u8 = 6;
 const LEFT_FRONT_STEER_ID: u8 = 9;
 
 
+/*
 fn main() -> anyhow::Result<()> {
 
     let port = serialport::new(SERIAL_PORT, BAUD)
@@ -70,4 +73,35 @@ fn main() -> anyhow::Result<()> {
     thread::sleep(Duration::from_millis(100));
 
     Ok(())
+}
+    */
+
+
+#[tokio::main()]
+async fn main() {
+    // Create RobotLink
+    let control_link = ControlLink::new();             // task to manage MQTT link
+    let drive = Drive::new();                          // drive subsystem
+
+    let rover = Rover::new(&robot_link, &drive);     // task to direct robot actions
+    
+    let (quit_tx, mut quit_rx) = mpsc::channel(1);     // signal to shut down. 
+
+    // Run all the tasks.  If one quits, the app ends.
+    select! {
+        _ = quit_rx.recv() => {
+            println!("Quit signalled.");
+        },
+        _ = control_link.run() => { 
+            println!("mqtt link quit.");
+        },
+        _ = rover.run() => {
+            println!("rover quit.");
+        }
+        _ = drive.run() => {
+            println!("Drive task quit.");
+        }
+    };
+
+    println!("All done.");
 }

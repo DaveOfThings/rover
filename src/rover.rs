@@ -3,6 +3,19 @@ use std::{io::{Read, Write, Error}};
 use lx_16a::Lx16aBus;
 use crate::drive::Drive;
 
+
+#[derive(Clone, Copy, Default, Debug, Serialize)]
+pub struct RobotVel {
+    lin_mps: f32,
+    ang_rps: f32,
+}
+
+#[derive(Clone, Copy, Debug, Serialize)]
+pub enum CommandState {
+    Disabled,
+    Teleop(RobotVel),
+}
+
 pub struct Rover<'a, T: Read+Write> {
     bus: &'a Lx16aBus<T>,
     drive: Drive<'a, T>,
@@ -14,6 +27,11 @@ impl<'a, T: Read+Write> Rover<'a, T> {
         Rover { bus: servo_bus, drive: drive }
     }
 
+    pub async fn run(&self) {
+        // TODO
+    }
+
+    /*
     pub fn wiggle(&self) {
         println!("They see me roving.");
         let seven = self.bus.servo(7);
@@ -28,6 +46,7 @@ impl<'a, T: Read+Write> Rover<'a, T> {
 
         Ok(())
     }
+    */
 
     pub fn drive_turn(&mut self, linear_speed_mps: f64, rotation_speed_rps: f64) -> Result<(), Error> {
         self.drive.set_speed(linear_speed_mps, rotation_speed_rps)?;
