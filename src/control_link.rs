@@ -38,7 +38,8 @@ impl ControlLink {
         let host_info: MqttHost = serde_yaml::from_str(&contents)
             .expect("Could not parse YAML");
 
-        let mut mqttoptions = MqttOptions::new("rumqtt-async", host_info.host, host_info.port);
+	// TODO-DW : Set client_id via .yml file
+        let mut mqttoptions = MqttOptions::new("rover", host_info.host, host_info.port);
         mqttoptions.set_credentials(host_info.user, host_info.password);
         mqttoptions.set_keep_alive(Duration::from_secs(5));
 
@@ -66,7 +67,7 @@ impl ControlLink {
                 // Got command / state from controller
                 let mut state = self.state.lock().await;
                 state.command_state = CommandState::default();  // TODO-DW : parse yaml message.
-                println!("Got (and ignored) command state.");
+                println!("Got (and ignored) command state: {:?}", msg.payload);
             }
             _ => {
                 // Ignoring unrecognized topics
