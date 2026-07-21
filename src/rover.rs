@@ -1,4 +1,4 @@
-use std::{io::{Read, Write, Error}};
+use std::{io::{Error, Read, Write}, time::Duration};
 
 use lx_16a::Lx16aBus;
 use crate::drive::DriveTrain;
@@ -31,6 +31,9 @@ impl<'a> Rover<'a> {
 
     pub async fn run(&self) {
         // TODO : Periodically check with the link
+        loop {
+            tokio::time::sleep(Duration::from_secs(1)).await;
+        }
     }
 
     /*

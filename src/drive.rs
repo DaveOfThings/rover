@@ -230,6 +230,9 @@ impl DriveTrain {
 
     
     pub async fn run(&self) {
+        loop {
+            tokio::time::sleep(Duration::from_secs(1)).await;
+        }
         // TODO
     }
 

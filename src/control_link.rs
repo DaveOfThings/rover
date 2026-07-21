@@ -34,7 +34,7 @@ impl ControlLink {
     pub fn new() -> ControlLink {
         let filename = "mqtt-server.yml";
         let contents = fs::read_to_string(filename)
-            .expect("Could not read mqtt-host.yml file");
+            .expect("Could not read mqtt-server.yml file");
         let host_info: MqttHost = serde_yaml::from_str(&contents)
             .expect("Could not parse YAML");
 
@@ -103,23 +103,30 @@ impl ControlLink {
             // Listen for messages from the robot
             println!("RobotLink polling event loop");
             let mut eventloop = self.eventloop.lock().await;
-            while let Ok(notification) = eventloop.poll().await {
-                
+            loop {
+                let notification = eventloop.poll().await;
                 match notification {
-                    Event::Incoming(Incoming::Publish(msg)) => {
-                        self.handle_msg(&msg).await;
+                    Ok(notification) => {
+                        match notification {
+                            Event::Incoming(Incoming::Publish(msg)) => {
+                                self.handle_msg(&msg).await;
+                            }
+                            Event::Outgoing(_) => {
+                                // println!("Don't need outgoing notification.");
+                            }
+                            Event::Incoming(Incoming::PubAck(_)) => {
+                                // println!("Don't need to handle pub acks.");
+                            }
+                            Event::Incoming(Incoming::PingResp) => {
+                                // println!("Don't need to handle ping responses.");
+                            }
+                            _ => {
+                                println!("Ignoring notification {:?}", notification);
+                            }
+                        }
                     }
-                    Event::Outgoing(_) => {
-                        // println!("Don't need outgoing notification.");
-                    }
-                    Event::Incoming(Incoming::PubAck(_)) => {
-                        // println!("Don't need to handle pub acks.");
-                    }
-                    Event::Incoming(Incoming::PingResp) => {
-                        // println!("Don't need to handle ping responses.");
-                    }
-                    _ => {
-                        println!("Ignoring notification {:?}", notification);
+                    Err(e) => {
+                        println!("Error from eventloop.poll: {e:?}");
                     }
                 }
             }
