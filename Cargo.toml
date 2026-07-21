@@ -12,3 +12,6 @@ vector2 = "0.1.5"
 tokio = { version = "1.53.0", features = ["full"] }
 features = "0.10.0"
 full = "0.3.0"
+rumqttc = "0.25.1"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_yaml = "0.9.34"

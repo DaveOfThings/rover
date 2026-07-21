@@ -3,7 +3,7 @@ mod drive;
 mod control_link;
 
 use crate::control_link::ControlLink;
-use tokio::main;
+use tokio::{select, sync::mpsc};
 use std::time::Duration;
 use lx_16a::Lx16aBus;
 use std::thread;
@@ -79,14 +79,16 @@ fn main() -> anyhow::Result<()> {
 
 
 #[tokio::main]
-async fn main() {
+async fn main() {    
+    // TODO-DW : Arrange for something to send to quit_tx to trigger exit.
+    let (quit_tx, mut quit_rx) = mpsc::channel::<()>(1);     // signal to shut down. 
+
     // Create RobotLink
     let control_link = ControlLink::new();             // task to manage MQTT link
     let drive = DriveTrain::new();                          // drive subsystem
 
-    let rover = Rover::new(&robot_link, &drive);     // task to direct robot actions
-    
-    let (quit_tx, mut quit_rx) = mpsc::channel(1);     // signal to shut down. 
+    let rover = Rover::new(&control_link, &drive);     // task to direct robot actions
+
 
     // Run all the tasks.  If one quits, the app ends.
     select! {

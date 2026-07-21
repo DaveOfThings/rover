@@ -8,7 +8,7 @@ use tokio::select;
 use tokio::time::{self};
 use std::time::Instant;
 
-use crate::robot_system::CommandState;
+use crate::rover::CommandState;
 
 // Define a struct that mirrors your YAML structure
 #[derive(Debug, Deserialize)]
@@ -65,7 +65,7 @@ impl ControlLink {
             "robot/command_state" => {
                 // Got command / state from controller
                 let mut state = self.state.lock().await;
-                state.command_state = Command_State::default();  // TODO-DW : parse yaml message.
+                state.command_state = CommandState::default();  // TODO-DW : parse yaml message.
                 println!("Got (and ignored) command state.");
             }
             _ => {

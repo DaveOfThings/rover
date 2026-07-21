@@ -3,6 +3,7 @@ use std::{io::{Read, Write, Error}};
 use lx_16a::Lx16aBus;
 use crate::drive::DriveTrain;
 use crate::control_link::ControlLink;
+use serde::Serialize;
 
 
 #[derive(Clone, Copy, Default, Debug, Serialize)]
@@ -11,21 +12,21 @@ pub struct RobotVel {
     ang_rps: f32,
 }
 
-#[derive(Clone, Copy, Debug, Serialize)]
+#[derive(Clone, Copy, Debug, Serialize, Default)]
 pub enum CommandState {
+    #[default]
     Disabled,
     Teleop(RobotVel),
 }
 
 pub struct Rover<'a> {
     link: &'a ControlLink,
-    drive: &'a DriveTrain,
+    drive: &'a DriveTrain<'a>,
 }
 
-impl<'a, T: Read+Write> Rover<'a, T> {
-    pub fn new(link: &ControllerLink, drive: &DriveTrain) -> Rover<'a, T> {
-        let drive = DriveTrain::new(&servo_bus);
-        Rover { bus: servo_bus, drive: drive }
+impl<'a> Rover<'a> {
+    pub fn new(link: &'a ControlLink, drive: &'a DriveTrain) -> Rover<'a> {
+        Rover { link, drive }
     }
 
     pub async fn run(&self) {

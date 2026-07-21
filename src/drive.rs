@@ -44,8 +44,8 @@ type Bus = Lx16aBus<Box<dyn SerialPort>>;
 type Servo<'a> = Lx16a<'a, Box<dyn SerialPort>>;
 
 struct WheelModule<'a> {
-    drive_servo: &'a Servo<'a>,
-    steer: Option<(&'a Servo<'a>, u16)>,   // servo and offset
+    drive_servo: Servo<'a>,
+    steer: Option<(Servo<'a>, u16)>,   // servo and offset
     // location: Vector2,
     radius: f64,
     rot_dir: Vector2,
@@ -53,8 +53,8 @@ struct WheelModule<'a> {
 }
 
 impl<'a> WheelModule<'a> {
-    fn new(drive_servo: &'a Servo<'a>, 
-               steer: Option<(&'a Servo<'a>, u16)>, // Steering servo and offset
+    fn new(drive_servo: Servo<'a>, 
+               steer: Option<(Servo<'a>, u16)>, // Steering servo and offset
                location: Vector2,
                reverse: bool) -> WheelModule<'a> {
         let radius = location.magnitude();                               
@@ -168,33 +168,33 @@ impl<'a> DriveTrain<'a> {
         // Wheels are ordered clockwise from front right.
         let wheels = [
             WheelModule::new(
-                &bus.servo(SERVO_ID_RIGHT_FRONT_DRIVE),
-                Some((&bus.servo(SERVO_ID_RIGHT_FRONT_STEER), RIGHT_FRONT_OFFSET)),
+                bus.servo(SERVO_ID_RIGHT_FRONT_DRIVE),
+                Some((bus.servo(SERVO_ID_RIGHT_FRONT_STEER), RIGHT_FRONT_OFFSET)),
                 Vector2::new(FRONT_CORNER_WHEEL_X_M, CORNER_WHEEL_Y_M),
                 true),
             WheelModule::new(
-                &bus.servo(SERVO_ID_RIGHT_CENTER_DRIVE),
+                bus.servo(SERVO_ID_RIGHT_CENTER_DRIVE),
                 None,
                 Vector2::new(MID_WHEEL_X_M, MID_WHEEL_Y_M),
                 true),
             WheelModule::new(
-                &bus.servo(SERVO_ID_RIGHT_REAR_DRIVE),
-                Some((&bus.servo(SERVO_ID_RIGHT_REAR_STEER), RIGHT_BACK_OFFSET)),
+                bus.servo(SERVO_ID_RIGHT_REAR_DRIVE),
+                Some((bus.servo(SERVO_ID_RIGHT_REAR_STEER), RIGHT_BACK_OFFSET)),
                 Vector2::new(BACK_CORNER_WHEEL_X_M, CORNER_WHEEL_Y_M),
                 true),
             WheelModule::new(
-                &bus.servo(SERVO_ID_LEFT_REAR_DRIVE),
-                Some((&bus.servo(SERVO_ID_LEFT_REAR_STEER), LEFT_BACK_OFFSET)),
+                bus.servo(SERVO_ID_LEFT_REAR_DRIVE),
+                Some((bus.servo(SERVO_ID_LEFT_REAR_STEER), LEFT_BACK_OFFSET)),
                 Vector2::new(BACK_CORNER_WHEEL_X_M, -CORNER_WHEEL_Y_M),
                 false),
             WheelModule::new(
-                &bus.servo(SERVO_ID_LEFT_CENTER_DRIVE),
+                bus.servo(SERVO_ID_LEFT_CENTER_DRIVE),
                 None,
                 Vector2::new(MID_WHEEL_X_M, -MID_WHEEL_Y_M, ),
                 false),
             WheelModule::new(
-                &bus.servo(SERVO_ID_LEFT_FRONT_DRIVE),
-                Some((&bus.servo(SERVO_ID_LEFT_FRONT_STEER), LEFT_FRONT_OFFSET)),
+                bus.servo(SERVO_ID_LEFT_FRONT_DRIVE),
+                Some((bus.servo(SERVO_ID_LEFT_FRONT_STEER), LEFT_FRONT_OFFSET)),
                 Vector2::new(FRONT_CORNER_WHEEL_X_M, -CORNER_WHEEL_Y_M),
                 false),
             ];
@@ -212,7 +212,7 @@ impl<'a> DriveTrain<'a> {
     //   The point about which the robot rotates is at (X=0, Y=turn_radius_m)
     //   Positive turns left, Negative right.  Zero pivots about the robots center
     //   To drive straight, set turn_radius_m to GO_STRAIGHT.
-    pub fn set_speed(&mut self, linear_mps: f64, rotation_rps: f64) -> Result<(), Error> {
+    pub fn set_speed(&self, linear_mps: f64, rotation_rps: f64) -> Result<(), Error> {
         // self.linear_speed_mps = linear_mps;
         // self.rotation_speed_rps = rotation_rps;
 
