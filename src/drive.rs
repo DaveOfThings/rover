@@ -1,6 +1,10 @@
-use std::io::{Read, Write, Error};
+use std::{io::{Error, Read, Write}, time::Duration};
 use lx_16a::{Lx16aBus, Lx16a, Lx16aMode};
+use serialport::SerialPort;
 use vector2::Vector2;
+
+const SERIAL_PORT: &str = "/dev/ttyUSB0";
+const BAUD: u32 = 115200;
 
 // Note: The drive module has adopted an NED reference frame:
 //   +X is forward
@@ -36,20 +40,23 @@ const RIGHT_BACK_OFFSET: u16 = 509;              // raw angle of right back, whe
 const LEFT_BACK_OFFSET: u16 = 447;               // raw angle of left back, when straight.
 const LEFT_FRONT_OFFSET: u16 = 564;              // raw angle of left front, when straight.
 
-struct WheelModule<'a, T: Read+Write> {
-    drive_servo: Lx16a<'a, T>,
-    steer: Option<(Lx16a<'a, T>, u16)>,   // servo and offset
+type Bus = Lx16aBus<Box<dyn SerialPort>>;
+type Servo<'a> = Lx16a<'a, Box<dyn SerialPort>>;
+
+struct WheelModule<'a> {
+    drive_servo: &'a Servo<'a>,
+    steer: Option<(&'a Servo<'a>, u16)>,   // servo and offset
     // location: Vector2,
     radius: f64,
     rot_dir: Vector2,
     reverse: bool,
 }
 
-impl<'a, T: Read+Write> WheelModule<'a, T> {
-    fn new(drive_servo: Lx16a<'a, T>, 
-               steer: Option<(Lx16a<'a, T>, u16)>, // Steering servo and offset
+impl<'a> WheelModule<'a> {
+    fn new(drive_servo: &'a Servo<'a>, 
+               steer: Option<(&'a Servo<'a>, u16)>, // Steering servo and offset
                location: Vector2,
-               reverse: bool) -> WheelModule<'a, T> {
+               reverse: bool) -> WheelModule<'a> {
         let radius = location.magnitude();                               
         let mut rot_dir = Vector2::new(-location.y, location.x);
         rot_dir.normalize();
@@ -140,59 +147,59 @@ impl<'a, T: Read+Write> WheelModule<'a, T> {
     }
 }
 
-pub struct Drive<'a, T: Write+Read> {
-    bus: &'a Lx16aBus<T>,
-    wheels: [WheelModule<'a, T>; 6], // 0 is front right, numbers increase clockwise
+pub struct DriveTrain<'a> {
+    bus: Bus,
+    wheels: [WheelModule<'a>; 6], // 0 is front right, numbers increase clockwise
     // linear_speed_mps: f64,
     // rotation_speed_rps: f64,
 }
 
-impl<'a, T: Read+Write> Drive<'a, T> {
-    pub fn new() -> Drive<'a, T> {
+impl<'a> DriveTrain<'a> {
+    pub fn new() -> DriveTrain<'a> {
 
         let port = serialport::new(SERIAL_PORT, BAUD)
             .timeout(Duration::from_millis(10))
             .open()
             .expect("Failed to open port");
 
-        let lx16a_bus = Lx16aBus::new(port);
+        let bus: Bus = Lx16aBus::new(port);
 
         // Create Lx16a servos and organize them into units.
         // Wheels are ordered clockwise from front right.
         let wheels = [
             WheelModule::new(
-                bus.servo(SERVO_ID_RIGHT_FRONT_DRIVE),
-                Some((bus.servo(SERVO_ID_RIGHT_FRONT_STEER), RIGHT_FRONT_OFFSET)),
+                &bus.servo(SERVO_ID_RIGHT_FRONT_DRIVE),
+                Some((&bus.servo(SERVO_ID_RIGHT_FRONT_STEER), RIGHT_FRONT_OFFSET)),
                 Vector2::new(FRONT_CORNER_WHEEL_X_M, CORNER_WHEEL_Y_M),
                 true),
             WheelModule::new(
-                bus.servo(SERVO_ID_RIGHT_CENTER_DRIVE),
+                &bus.servo(SERVO_ID_RIGHT_CENTER_DRIVE),
                 None,
                 Vector2::new(MID_WHEEL_X_M, MID_WHEEL_Y_M),
                 true),
             WheelModule::new(
-                bus.servo(SERVO_ID_RIGHT_REAR_DRIVE),
-                Some((bus.servo(SERVO_ID_RIGHT_REAR_STEER), RIGHT_BACK_OFFSET)),
+                &bus.servo(SERVO_ID_RIGHT_REAR_DRIVE),
+                Some((&bus.servo(SERVO_ID_RIGHT_REAR_STEER), RIGHT_BACK_OFFSET)),
                 Vector2::new(BACK_CORNER_WHEEL_X_M, CORNER_WHEEL_Y_M),
                 true),
             WheelModule::new(
-                bus.servo(SERVO_ID_LEFT_REAR_DRIVE),
-                Some((bus.servo(SERVO_ID_LEFT_REAR_STEER), LEFT_BACK_OFFSET)),
+                &bus.servo(SERVO_ID_LEFT_REAR_DRIVE),
+                Some((&bus.servo(SERVO_ID_LEFT_REAR_STEER), LEFT_BACK_OFFSET)),
                 Vector2::new(BACK_CORNER_WHEEL_X_M, -CORNER_WHEEL_Y_M),
                 false),
             WheelModule::new(
-                bus.servo(SERVO_ID_LEFT_CENTER_DRIVE),
+                &bus.servo(SERVO_ID_LEFT_CENTER_DRIVE),
                 None,
                 Vector2::new(MID_WHEEL_X_M, -MID_WHEEL_Y_M, ),
                 false),
             WheelModule::new(
-                bus.servo(SERVO_ID_LEFT_FRONT_DRIVE),
-                Some((bus.servo(SERVO_ID_LEFT_FRONT_STEER), LEFT_FRONT_OFFSET)),
+                &bus.servo(SERVO_ID_LEFT_FRONT_DRIVE),
+                Some((&bus.servo(SERVO_ID_LEFT_FRONT_STEER), LEFT_FRONT_OFFSET)),
                 Vector2::new(FRONT_CORNER_WHEEL_X_M, -CORNER_WHEEL_Y_M),
                 false),
             ];
 
-        Drive { bus: lx16a_bus, wheels, /* linear_speed_mps: 0.0, rotation_speed_rps: 0.0 */ }
+        DriveTrain { bus, wheels, /* linear_speed_mps: 0.0, rotation_speed_rps: 0.0 */ }
     }
 
     // Set speed and turning radius.

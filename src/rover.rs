@@ -1,7 +1,8 @@
 use std::{io::{Read, Write, Error}};
 
 use lx_16a::Lx16aBus;
-use crate::drive::Drive;
+use crate::drive::DriveTrain;
+use crate::control_link::ControlLink;
 
 
 #[derive(Clone, Copy, Default, Debug, Serialize)]
@@ -16,14 +17,14 @@ pub enum CommandState {
     Teleop(RobotVel),
 }
 
-pub struct Rover<'a, T: Read+Write> {
-    bus: &'a Lx16aBus<T>,
-    drive: Drive<'a, T>,
+pub struct Rover<'a> {
+    link: &'a ControlLink,
+    drive: &'a DriveTrain,
 }
 
 impl<'a, T: Read+Write> Rover<'a, T> {
-    pub fn new(servo_bus: &'a Lx16aBus<T>) -> Rover<'a, T> {
-        let drive = Drive::new(&servo_bus);
+    pub fn new(link: &ControllerLink, drive: &DriveTrain) -> Rover<'a, T> {
+        let drive = DriveTrain::new(&servo_bus);
         Rover { bus: servo_bus, drive: drive }
     }
 

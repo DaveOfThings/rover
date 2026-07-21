@@ -2,15 +2,16 @@ mod rover;
 mod drive;
 mod control_link;
 
-use crate::ControlLink;
+use crate::control_link::ControlLink;
+use tokio::main;
 use std::time::Duration;
 use lx_16a::Lx16aBus;
 use std::thread;
+use crate::drive::DriveTrain;
 
 use rover::Rover;
 
-const SERIAL_PORT: &str = "/dev/ttyUSB0";
-const BAUD: u32 = 115200;
+
 
 const RIGHT_FRONT_STEER_ID: u8 = 1;
 const RIGHT_BACK_STEER_ID: u8 = 4;
@@ -77,11 +78,11 @@ fn main() -> anyhow::Result<()> {
     */
 
 
-#[tokio::main()]
+#[tokio::main]
 async fn main() {
     // Create RobotLink
     let control_link = ControlLink::new();             // task to manage MQTT link
-    let drive = Drive::new();                          // drive subsystem
+    let drive = DriveTrain::new();                          // drive subsystem
 
     let rover = Rover::new(&robot_link, &drive);     // task to direct robot actions
     
