@@ -21,7 +21,7 @@ pub enum CommandState {
 
 pub struct Rover<'a> {
     link: &'a ControlLink,
-    drive: &'a DriveTrain<'a>,
+    drive: &'a DriveTrain,
 }
 
 impl<'a> Rover<'a> {

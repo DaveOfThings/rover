@@ -1,4 +1,4 @@
-use std::{io::{Error, Read, Write}, time::Duration};
+use std::{io::{Error, Read, Write}, sync::Arc, time::Duration};
 use lx_16a::{Lx16aBus, Lx16a, Lx16aMode};
 use serialport::SerialPort;
 use vector2::Vector2;
@@ -40,23 +40,23 @@ const RIGHT_BACK_OFFSET: u16 = 509;              // raw angle of right back, whe
 const LEFT_BACK_OFFSET: u16 = 447;               // raw angle of left back, when straight.
 const LEFT_FRONT_OFFSET: u16 = 564;              // raw angle of left front, when straight.
 
-type Bus = Lx16aBus<Box<dyn SerialPort>>;
-type Servo<'a> = Lx16a<'a, Box<dyn SerialPort>>;
+type Bus = Arc<Lx16aBus<Box<dyn SerialPort>>>;
+type Servo = Lx16a<Box<dyn SerialPort>>;
 
-struct WheelModule<'a> {
-    drive_servo: Servo<'a>,
-    steer: Option<(Servo<'a>, u16)>,   // servo and offset
+struct WheelModule {
+    drive_servo: Servo,
+    steer: Option<(Servo, u16)>,   // servo and offset
     // location: Vector2,
     radius: f64,
     rot_dir: Vector2,
     reverse: bool,
 }
 
-impl<'a> WheelModule<'a> {
-    fn new(drive_servo: Servo<'a>, 
-               steer: Option<(Servo<'a>, u16)>, // Steering servo and offset
+impl<'a> WheelModule {
+    fn new(drive_servo: Servo, 
+               steer: Option<(Servo, u16)>, // Steering servo and offset
                location: Vector2,
-               reverse: bool) -> WheelModule<'a> {
+               reverse: bool) -> WheelModule {
         let radius = location.magnitude();                               
         let mut rot_dir = Vector2::new(-location.y, location.x);
         rot_dir.normalize();
@@ -147,22 +147,22 @@ impl<'a> WheelModule<'a> {
     }
 }
 
-pub struct DriveTrain<'a> {
+pub struct DriveTrain {
     bus: Bus,
-    wheels: [WheelModule<'a>; 6], // 0 is front right, numbers increase clockwise
+    wheels: [WheelModule; 6], // 0 is front right, numbers increase clockwise
     // linear_speed_mps: f64,
     // rotation_speed_rps: f64,
 }
 
-impl<'a> DriveTrain<'a> {
-    pub fn new() -> DriveTrain<'a> {
+impl DriveTrain {
+    pub fn new() -> DriveTrain {
 
         let port = serialport::new(SERIAL_PORT, BAUD)
             .timeout(Duration::from_millis(10))
             .open()
             .expect("Failed to open port");
 
-        let bus: Bus = Lx16aBus::new(port);
+        let bus: Bus = Arc::new(Lx16aBus::new(port));
 
         // Create Lx16a servos and organize them into units.
         // Wheels are ordered clockwise from front right.
