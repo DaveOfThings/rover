@@ -43,34 +43,65 @@ const LEFT_FRONT_OFFSET: u16 = 564;              // raw angle of left front, whe
 type Bus = Arc<Lx16aBus<Box<dyn SerialPort>>>;
 type Servo = Lx16a<Box<dyn SerialPort>>;
 
-struct WheelModule {
-    drive_servo: Servo,
-    steer: Option<(Servo, u16)>,   // servo and offset
-    // location: Vector2,
-    radius: f64,
-    rot_dir: Vector2,
-    max_steer: f64,
-    min_steer: f64,
-    reverse: bool,
+struct Steering {
+    steer_servo: Servo,   // servo that controls steering
+    offset: u16,          // servo position corresponding to straight forward
+    max_steer_rad: f64,   // max (ccw) steering angle (0 represents forward)
+    min_steer_rad: f64,   // min (cw) steering angle (0 represents forward)
 }
 
+impl Steering {
+    // Convert radian steering angle to raw servo position
+    fn to_raw_angle(&self, angle_rad: f64) -> u16 {
+        // Scale units
+        let raw = angle_rad * RAD_TO_RAW;
+
+        let position = (self.offset as isize) + (raw as isize);
+
+        position as u16
+    }
+}
+
+struct WheelModule {
+    unit: u32,                   // unit number (arbitrary, not necessarily the servo id.)
+    drive_servo: Servo,          // drive servo
+    steering: Option<Steering>,  // optional steering servo and steering data
+    location: Vector2,
+    radius: f64,                 // distance from robot origin
+    rot_dir: Vector2,            // unit vector in direction of + rotation for this module
+    reverse: bool,               // true if drive servo needs negative speed to go forward
+}
+
+
 impl<'a> WheelModule {
-    fn new(drive_servo: Servo, 
-               steer: Option<(Servo, u16)>, // Steering servo and offset
-               location: Vector2,
-               reverse: bool) -> WheelModule {
+    // Construct a Wheel Module
+    fn new( unit: u32,
+            drive_servo: Servo, 
+            steer: Option<(Servo, u16)>, // Steering servo and offset
+            location: Vector2,
+            reverse: bool) -> WheelModule {
+
+        // Compute radius and rotation direction from location
         let radius = location.magnitude();                               
         let mut rot_dir = Vector2::new(-location.y, location.x);
         rot_dir.normalize();
 
-        // Compute min, max steering angles
-        let mut max_steer = rot_dir.y.atan2(rot_dir.x);
-        if max_steer < 0.0 {
-            max_steer += std::f64::consts::PI;  // TODO: Clarify all these angles, this is feeling like a hack
+        // Construct steering option
+        let steering = if let Some((steer_servo, offset)) = steer {
+            // Compute min, max steering angles
+            let mut max_steer_rad = rot_dir.y.atan2(rot_dir.x);
+            if max_steer_rad < 0.0 {
+                max_steer_rad += std::f64::consts::PI;  // TODO: Clarify all these angles, this is feeling like a hack
+            }
+            let min_steer_rad = max_steer_rad - std::f64::consts::PI;
+            Some( Steering { steer_servo, offset, max_steer_rad, min_steer_rad })
         }
-        let min_steer = max_steer - std::f64::consts::PI;
+        else {
+            None
+        };
 
-        let module = WheelModule { drive_servo, steer, radius, rot_dir, max_steer, min_steer, reverse };
+        // Construct the module
+        let module = WheelModule { unit, drive_servo, steering, location, radius, rot_dir, reverse };
 
         // Set initial mode, position, speed of servos
         module.init_servos();
@@ -78,32 +109,25 @@ impl<'a> WheelModule {
         module
     }
 
+    // Initialize servos associated with this module
     fn init_servos(&self) {
         // TODO
     }
 
+    // Convert meters per second to servo raw units
     fn to_raw_speed(&self, speed_mps: f64) -> i16 {
+        // Apply scaling and reverse
         let mut raw_speed = match self.reverse {
             false => (speed_mps * MPS_TO_RAW) as i16,
             true => -(speed_mps * MPS_TO_RAW) as i16,
         };
         // println!("Setting speed: {speed_mps}, raw: {raw_speed}");
 
+        // Limit raw speed to +/- 1000
         if raw_speed > 1000 { raw_speed = 1000; }
         if raw_speed < -1000 { raw_speed = -1000; }
 
         raw_speed
-    }
-
-    fn to_raw_angle(&self, angle_rad: f64) -> u16 {
-        let raw = angle_rad * RAD_TO_RAW;
-
-        let mut position = raw as isize;
-        if let Some((_, offset)) = self.steer {
-            position += offset as isize;
-        }
-
-        position as u16
     }
 
     fn compute_speed_angle(&self, linear_mps: f64, rotation_rps: f64) -> (f64, f64) {
@@ -119,19 +143,17 @@ impl<'a> WheelModule {
         // Combine linear and rotational components
         let x_mps = lin_x_mps + rot_x_mps;
         let y_mps = lin_y_mps + rot_y_mps;
+        let vel = Vector2 { x: x_mps, y: y_mps };
 
         // Get speed and angle for this wheel module
         let mut speed_mps = (x_mps*x_mps + y_mps*y_mps).sqrt();
         let mut ang_rad = y_mps.atan2(x_mps);
 
         // Map angles to the valid range
-        if ang_rad > self.max_steer {
-            ang_rad = ang_rad - std::f64::consts::PI;
-            speed_mps = -speed_mps
-        }
-        if ang_rad < self.min_steer {
+        if Vector2::dot(self.location, vel) < 0.0 {
+            // use reverse direction
+            speed_mps = -speed_mps;
             ang_rad = ang_rad + std::f64::consts::PI;
-            speed_mps = -speed_mps
         }
 
         // println!("lin_mps: ({lin_x_mps}, {lin_y_mps})");
@@ -144,11 +166,12 @@ impl<'a> WheelModule {
 
     fn write_servos(&self, speed_mps: f64, angle_rad: f64) -> Result<(), Error> {
         let speed_raw = self.to_raw_speed(speed_mps);
-        let angle_raw = self.to_raw_angle(angle_rad);
+
 
         self.drive_servo.set_mode(Lx16aMode::Speed(speed_raw))?;
-        if let Some((steer_servo, _offset)) = &self.steer {
-            steer_servo.move_time(angle_raw, TICK_MS)?;
+        if let Some((steering)) = &self.steering {
+            let angle_raw = steering.to_raw_angle(angle_rad);
+            steering.steer_servo.move_time(angle_raw, TICK_MS)?;
         }
 
         Ok(())
@@ -169,8 +192,8 @@ impl<'a> WheelModule {
 
     fn set_powered(&self, powered: bool) -> Result<(), Error> {
         self.drive_servo.set_powered(powered)?;
-        if let Some((steer_servo, _offset)) = &self.steer {
-            steer_servo.set_powered(powered)?;
+        if let Some(steering) = &self.steering {
+            steering.steer_servo.set_powered(powered)?;
         }
 
         Ok(())
@@ -199,31 +222,37 @@ impl DriveTrain {
         // Wheels are ordered clockwise from front right.
         let wheels = [
             WheelModule::new(
+                1,
                 bus.servo(SERVO_ID_RIGHT_FRONT_DRIVE),
                 Some((bus.servo(SERVO_ID_RIGHT_FRONT_STEER), RIGHT_FRONT_OFFSET)),
                 Vector2::new(FRONT_CORNER_WHEEL_X_M, CORNER_WHEEL_Y_M),
                 true),
             WheelModule::new(
+                2,
                 bus.servo(SERVO_ID_RIGHT_CENTER_DRIVE),
                 None,
                 Vector2::new(MID_WHEEL_X_M, MID_WHEEL_Y_M),
                 true),
             WheelModule::new(
+                3,
                 bus.servo(SERVO_ID_RIGHT_REAR_DRIVE),
                 Some((bus.servo(SERVO_ID_RIGHT_REAR_STEER), RIGHT_BACK_OFFSET)),
                 Vector2::new(BACK_CORNER_WHEEL_X_M, CORNER_WHEEL_Y_M),
-                true),
+                false),
             WheelModule::new(
+                4,
                 bus.servo(SERVO_ID_LEFT_REAR_DRIVE),
                 Some((bus.servo(SERVO_ID_LEFT_REAR_STEER), LEFT_BACK_OFFSET)),
                 Vector2::new(BACK_CORNER_WHEEL_X_M, -CORNER_WHEEL_Y_M),
-                false),
+                true),
             WheelModule::new(
+                5,
                 bus.servo(SERVO_ID_LEFT_CENTER_DRIVE),
                 None,
                 Vector2::new(MID_WHEEL_X_M, -MID_WHEEL_Y_M, ),
                 false),
             WheelModule::new(
+                6,
                 bus.servo(SERVO_ID_LEFT_FRONT_DRIVE),
                 Some((bus.servo(SERVO_ID_LEFT_FRONT_STEER), LEFT_FRONT_OFFSET)),
                 Vector2::new(FRONT_CORNER_WHEEL_X_M, -CORNER_WHEEL_Y_M),
