@@ -49,6 +49,8 @@ struct WheelModule {
     // location: Vector2,
     radius: f64,
     rot_dir: Vector2,
+    max_steer: f64,
+    min_steer: f64,
     reverse: bool,
 }
 
@@ -61,7 +63,14 @@ impl<'a> WheelModule {
         let mut rot_dir = Vector2::new(-location.y, location.x);
         rot_dir.normalize();
 
-        let module = WheelModule { drive_servo, steer, radius, rot_dir, reverse };
+        // Compute min, max steering angles
+        let mut max_steer = rot_dir.y.atan2(rot_dir.x);
+        if max_steer < 0.0 {
+            max_steer += std::f64::consts::PI;  // TODO: Clarify all these angles, this is feeling like a hack
+        }
+        let min_steer = max_steer - std::f64::consts::PI;
+
+        let module = WheelModule { drive_servo, steer, radius, rot_dir, max_steer, min_steer, reverse };
 
         // Set initial mode, position, speed of servos
         module.init_servos();
@@ -78,7 +87,7 @@ impl<'a> WheelModule {
             false => (speed_mps * MPS_TO_RAW) as i16,
             true => -(speed_mps * MPS_TO_RAW) as i16,
         };
-        println!("Setting speed: {speed_mps}, raw: {raw_speed}");
+        // println!("Setting speed: {speed_mps}, raw: {raw_speed}");
 
         if raw_speed > 1000 { raw_speed = 1000; }
         if raw_speed < -1000 { raw_speed = -1000; }
@@ -112,13 +121,23 @@ impl<'a> WheelModule {
         let y_mps = lin_y_mps + rot_y_mps;
 
         // Get speed and angle for this wheel module
-        let speed_mps = (x_mps*x_mps + y_mps*y_mps).sqrt();
-        let ang_rad = y_mps.atan2(x_mps);
+        let mut speed_mps = (x_mps*x_mps + y_mps*y_mps).sqrt();
+        let mut ang_rad = y_mps.atan2(x_mps);
 
-        println!("lin_mps: ({lin_x_mps}, {lin_y_mps})");
-        println!("rot_mps: ({rot_x_mps}, {rot_y_mps})");
-        println!("speed_mps: {speed_mps}");
-        println!("ang_rad: {ang_rad}");
+        // Map angles to the valid range
+        if ang_rad > self.max_steer {
+            ang_rad = ang_rad - std::f64::consts::PI;
+            speed_mps = -speed_mps
+        }
+        if ang_rad < self.min_steer {
+            ang_rad = ang_rad + std::f64::consts::PI;
+            speed_mps = -speed_mps
+        }
+
+        // println!("lin_mps: ({lin_x_mps}, {lin_y_mps})");
+        // println!("rot_mps: ({rot_x_mps}, {rot_y_mps})");
+        // println!("speed_mps: {speed_mps}");
+        // println!("ang_rad: {ang_rad}");
 
         (speed_mps, ang_rad)
     }
@@ -140,11 +159,23 @@ impl<'a> WheelModule {
     fn set_speed(&self, linear_mps: f64, rotation_rps: f64) -> Result<(), Error> {
         let (speed_mps, ang_rad) = self.compute_speed_angle(linear_mps, rotation_rps);
 
+        println!("lin: {linear_mps}, rot: {rotation_rps} -> speed: {speed_mps}, angle: {ang_rad}");
+
         // Write the results to the servo
         self.write_servos(speed_mps, ang_rad)?;
 
         Ok(())
     }
+
+    fn set_powered(&self, powered: bool) -> Result<(), Error> {
+        self.drive_servo.set_powered(powered)?;
+        if let Some((steer_servo, _offset)) = &self.steer {
+            steer_servo.set_powered(powered)?;
+        }
+
+        Ok(())
+    }
+
 }
 
 pub struct DriveTrain {
@@ -199,7 +230,7 @@ impl DriveTrain {
                 false),
             ];
 
-        DriveTrain { bus, wheels, /* linear_speed_mps: 0.0, rotation_speed_rps: 0.0 */ }
+        DriveTrain { bus, wheels }
     }
 
     // Set speed and turning radius.
@@ -226,6 +257,19 @@ impl DriveTrain {
         });
 
         retval
+    }
+
+    pub fn set_powered(&self, powered: bool) -> Result<(), Error> {
+        let mut retval = Ok(());
+
+        self.wheels.iter().for_each(|wheel| {
+            match wheel.set_powered(false) {
+                Err(e) => retval = Err(e),
+                _ => ()
+            };
+        });
+
+        retval        
     }
 
     

@@ -39,7 +39,7 @@ impl ControlLink {
             .expect("Could not parse YAML");
 
 	// TODO-DW : Set client_id via .yml file
-        let mut mqttoptions = MqttOptions::new("rover", host_info.host, host_info.port);
+        let mut mqttoptions = MqttOptions::new("rover2", host_info.host, host_info.port);
         mqttoptions.set_credentials(host_info.user, host_info.password);
         mqttoptions.set_keep_alive(Duration::from_secs(5));
 
@@ -55,7 +55,7 @@ impl ControlLink {
     }
 
     pub async fn handle_msg(&self, msg: &Publish) {
-        println!("Received = {:?}", msg);
+        // println!("Received = {:?}", msg);
         match msg.topic.as_str() {
             "controller/heartbeat" => {
                 // Got heartbeat from robot
@@ -66,13 +66,20 @@ impl ControlLink {
             "robot/command_state" => {
                 // Got command / state from controller
                 let mut state = self.state.lock().await;
-                state.command_state = CommandState::default();  // TODO-DW : parse yaml message.
-                println!("Got (and ignored) command state: {:?}", msg.payload);
+                state.command_state = serde_yaml::from_slice::<CommandState>(&msg.payload).expect("Could not parse YAML");
+                // println!("Got command state: {:?}", msg.payload);
             }
             _ => {
                 // Ignoring unrecognized topics
+                println!("Ignoring topic: {:?}", msg.topic.as_str());
             }
         }
+    }
+
+    pub async fn get_command_state(&self) -> CommandState {
+        let link_state = self.state.lock().await;
+
+        link_state.command_state
     }
 
     pub async fn run(&self) {
@@ -94,7 +101,7 @@ impl ControlLink {
                     // Send heartbeat
                     // TODO: Handle error
                     let _ = client.publish("robot/heartbeat", QoS::AtLeastOnce, false, "still alive").await;
-                    println!("heartbeat.");
+                    println!("heartbeat sent.");
                 }
             }
         };

@@ -3,16 +3,16 @@ use std::{io::{Error, Read, Write}, time::Duration};
 use lx_16a::Lx16aBus;
 use crate::drive::DriveTrain;
 use crate::control_link::ControlLink;
-use serde::Serialize;
+use serde::{Serialize, Deserialize};
 
 
-#[derive(Clone, Copy, Default, Debug, Serialize)]
+#[derive(Clone, Copy, Default, Debug, Serialize, Deserialize)]
 pub struct RobotVel {
     lin_mps: f32,
     ang_rps: f32,
 }
 
-#[derive(Clone, Copy, Debug, Serialize, Default)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, Default)]
 pub enum CommandState {
     #[default]
     Disabled,
@@ -31,8 +31,23 @@ impl<'a> Rover<'a> {
 
     pub async fn run(&self) {
         // TODO : Periodically check with the link
+        let mut interval = tokio::time::interval(Duration::from_millis(20));
         loop {
-            tokio::time::sleep(Duration::from_secs(1)).await;
+            interval.tick().await;
+
+            // Get command state from link
+            match self.link.get_command_state().await {
+                CommandState::Disabled => {
+                    // println!("Got disabled state from link"); // TODO : Create enum to represent enabled/disabled + speed.
+                    let _ = self.drive.set_powered(false);    // TODO : Convert servo controls to async
+                }
+                CommandState::Teleop(cmd_vel) => {
+                    // println!("Got teleop state from link");
+                    let _ = self.drive.set_powered(true);
+                    let _ = self.drive.set_speed(cmd_vel.lin_mps as f64, cmd_vel.ang_rps as f64);
+                    // println!("Told Drive to go.");
+                }
+            }
         }
     }
 
