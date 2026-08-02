@@ -47,8 +47,6 @@ type Servo = Lx16a<Box<dyn SerialPort>>;
 struct Steering {
     steer_servo: Servo,   // servo that controls steering
     offset: u16,          // servo position corresponding to straight forward
-    max_steer_rad: f64,   // max (ccw) steering angle (0 represents forward)
-    min_steer_rad: f64,   // min (cw) steering angle (0 represents forward)
 }
 
 impl Steering {
@@ -89,13 +87,7 @@ impl<'a> WheelModule {
 
         // Construct steering option
         let steering = if let Some((steer_servo, offset)) = steer {
-            // Compute min, max steering angles
-            let mut max_steer_rad = rot_dir.y.atan2(rot_dir.x);
-            if max_steer_rad < 0.0 {
-                max_steer_rad += std::f64::consts::PI;  // TODO: Clarify all these angles, this is feeling like a hack
-            }
-            let min_steer_rad = max_steer_rad - std::f64::consts::PI;
-            Some( Steering { steer_servo, offset, max_steer_rad, min_steer_rad })
+            Some( Steering { steer_servo, offset })
         }
         else {
             None
@@ -152,19 +144,16 @@ impl<'a> WheelModule {
         let mut ang_rad = y_mps.atan2(x_mps);
 
         // Map angles to the valid range
-        if ang_rad < PI/2.0 {
+        while ang_rad < PI/2.0 {
             ang_rad += PI;
             speed_mps = -speed_mps;
         }
-        else if ang_rad > PI/2.0 {
+        while ang_rad > PI/2.0 {
             ang_rad -= PI;
             speed_mps = -speed_mps;
         }
 
-        // println!("lin_mps: ({lin_x_mps}, {lin_y_mps})");
-        // println!("rot_mps: ({rot_x_mps}, {rot_y_mps})");
-        // println!("speed_mps: {speed_mps}");
-        // println!("ang_rad: {ang_rad}");
+        println!("id: {}, speed: {speed_mps}, ang: {ang_rad}", self.unit);
 
         (speed_mps, ang_rad)
     }
@@ -277,13 +266,13 @@ impl DriveTrain {
                 bus.servo(SERVO_ID_RIGHT_REAR_DRIVE),
                 Some((bus.servo(SERVO_ID_RIGHT_REAR_STEER), RIGHT_BACK_OFFSET)),
                 Vector2::new(BACK_CORNER_WHEEL_X_M, CORNER_WHEEL_Y_M),
-                false),
+                true),
             WheelModule::new(
                 4,
                 bus.servo(SERVO_ID_LEFT_REAR_DRIVE),
                 Some((bus.servo(SERVO_ID_LEFT_REAR_STEER), LEFT_BACK_OFFSET)),
                 Vector2::new(BACK_CORNER_WHEEL_X_M, -CORNER_WHEEL_Y_M),
-                true),
+                false),
             WheelModule::new(
                 5,
                 bus.servo(SERVO_ID_LEFT_CENTER_DRIVE),
