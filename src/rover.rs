@@ -15,8 +15,8 @@ pub struct RobotVel {
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, Default)]
 pub enum CommandState {
     #[default]
-    Disabled,
-    Teleop(RobotVel),
+    Disabled,             // Drive motors off
+    Teleop(RobotVel),     // Remote controlled driving
 }
 
 pub struct Rover<'a> {
@@ -32,6 +32,7 @@ impl<'a> Rover<'a> {
     pub async fn run(&self) {
         // TODO : Periodically check with the link
         let mut interval = tokio::time::interval(Duration::from_millis(20));
+        let mut powered = false;
         loop {
             interval.tick().await;
 
@@ -39,11 +40,17 @@ impl<'a> Rover<'a> {
             match self.link.get_command_state().await {
                 CommandState::Disabled => {
                     // println!("Got disabled state from link"); // TODO : Create enum to represent enabled/disabled + speed.
-                    let _ = self.drive.set_powered(false);    // TODO : Convert servo controls to async
+                    if powered {
+                        let _ = self.drive.set_powered(false);    // TODO : Convert servo controls to async
+                        powered = false;
+                    }
                 }
                 CommandState::Teleop(cmd_vel) => {
                     // println!("Got teleop state from link");
-                    let _ = self.drive.set_powered(true);
+                    if !powered {
+                        let _ = self.drive.set_powered(true);
+                        powered = true;
+                    }
                     let _ = self.drive.set_speed(cmd_vel.lin_mps as f64, cmd_vel.ang_rps as f64);
                     // println!("Told Drive to go.");
                 }

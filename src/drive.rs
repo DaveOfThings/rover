@@ -2,6 +2,7 @@ use std::{io::{Error, Read, Write}, sync::Arc, time::Duration};
 use lx_16a::{Lx16aBus, Lx16a, Lx16aMode};
 use serialport::SerialPort;
 use vector2::Vector2;
+use std::f64::consts::PI;
 
 const SERIAL_PORT: &str = "/dev/ttyUSB0";
 const BAUD: u32 = 115200;
@@ -130,7 +131,9 @@ impl<'a> WheelModule {
         raw_speed
     }
 
-    fn compute_speed_angle(&self, linear_mps: f64, rotation_rps: f64) -> (f64, f64) {
+    // For this wheel module, convert robot's speed (linear [mps] and rotation [rps]
+    // into this wheel's speed [mps] and steering direction [radians]
+    fn drive_speed_angle(&self, linear_mps: f64, rotation_rps: f64) -> (f64, f64) {
         // Get X, Y components of linear speed
         let lin_x_mps = linear_mps;
         let lin_y_mps = 0.0;
@@ -143,23 +146,45 @@ impl<'a> WheelModule {
         // Combine linear and rotational components
         let x_mps = lin_x_mps + rot_x_mps;
         let y_mps = lin_y_mps + rot_y_mps;
-        let vel = Vector2 { x: x_mps, y: y_mps };
 
         // Get speed and angle for this wheel module
         let mut speed_mps = (x_mps*x_mps + y_mps*y_mps).sqrt();
         let mut ang_rad = y_mps.atan2(x_mps);
 
         // Map angles to the valid range
-        if Vector2::dot(self.location, vel) < 0.0 {
-            // use reverse direction
+        if ang_rad < PI/2.0 {
+            ang_rad += PI;
             speed_mps = -speed_mps;
-            ang_rad = ang_rad + std::f64::consts::PI;
+        }
+        else if ang_rad > PI/2.0 {
+            ang_rad -= PI;
+            speed_mps = -speed_mps;
         }
 
         // println!("lin_mps: ({lin_x_mps}, {lin_y_mps})");
         // println!("rot_mps: ({rot_x_mps}, {rot_y_mps})");
         // println!("speed_mps: {speed_mps}");
         // println!("ang_rad: {ang_rad}");
+
+        (speed_mps, ang_rad)
+    }
+
+    fn spin_speed_angle(&self, rotation_rps: f64) -> (f64, f64) {
+        // Get X, Y components of rotational speed
+        let mut speed_mps = rotation_rps * self.radius;  // meters per sec
+        let rot_x_mps = speed_mps * self.rot_dir.x;
+        let rot_y_mps = speed_mps * self.rot_dir.y;
+        let mut ang_rad = rot_y_mps.atan2(rot_x_mps);
+
+        // Map angles to the valid range
+        if ang_rad < -PI/2.0 {
+            ang_rad += PI;
+            speed_mps = -speed_mps;
+        }
+        else if ang_rad > PI/2.0 {
+            ang_rad -= PI;
+            speed_mps = -speed_mps;
+        }
 
         (speed_mps, ang_rad)
     }
@@ -179,10 +204,23 @@ impl<'a> WheelModule {
 
     // Convert robot speed and rotation into drive speed and steering angle
     // for this wheel module.
-    fn set_speed(&self, linear_mps: f64, rotation_rps: f64) -> Result<(), Error> {
-        let (speed_mps, ang_rad) = self.compute_speed_angle(linear_mps, rotation_rps);
+    fn spin(&self, rotation_rps: f64) -> Result<(), Error> {
+        let (speed_mps, ang_rad) = self.spin_speed_angle(rotation_rps);
 
-        println!("lin: {linear_mps}, rot: {rotation_rps} -> speed: {speed_mps}, angle: {ang_rad}");
+        println!("spin rot: {rotation_rps} -> speed: {speed_mps}, angle: {ang_rad}");
+
+        // Write the results to the servo
+        self.write_servos(speed_mps, ang_rad)?;
+
+        Ok(())
+    }
+
+    // Convert robot speed and rotation into drive speed and steering angle
+    // for this wheel module.
+    fn drive(&self, linear_mps: f64, rotation_rps: f64) -> Result<(), Error> {
+        let (speed_mps, ang_rad) = self.drive_speed_angle(linear_mps, rotation_rps);
+
+        println!("drive lin: {linear_mps}, rot: {rotation_rps} -> speed: {speed_mps}, angle: {ang_rad}");
 
         // Write the results to the servo
         self.write_servos(speed_mps, ang_rad)?;
@@ -209,6 +247,7 @@ pub struct DriveTrain {
 }
 
 impl DriveTrain {
+    const MAX_RADIANS_PER_METER: f64 = 1.0;  // TODO: TBD
     pub fn new() -> DriveTrain {
 
         let port = serialport::new(SERIAL_PORT, BAUD)
@@ -273,17 +312,41 @@ impl DriveTrain {
     //   Positive turns left, Negative right.  Zero pivots about the robots center
     //   To drive straight, set turn_radius_m to GO_STRAIGHT.
     pub fn set_speed(&self, linear_mps: f64, rotation_rps: f64) -> Result<(), Error> {
-        // self.linear_speed_mps = linear_mps;
-        // self.rotation_speed_rps = rotation_rps;
-
         let mut retval = Ok(());
 
-        self.wheels.iter().for_each(|wheel| {
-            match wheel.set_speed(linear_mps, rotation_rps) {
-                Err(e) => retval = Err(e),
-                _ => ()
+
+
+        // Check which regime we are operating in: spin or drive.
+        if (linear_mps == 0.0) && (rotation_rps != 0.0) {
+            // Spin
+            // Tell wheels what to do in spin mode
+            self.wheels.iter().for_each(|wheel| {
+                match wheel.spin(rotation_rps) {
+                    Err(e) => retval = Err(e),
+                    _ => ()
+                };
+            });
+        }
+        else {
+            // Drive
+            // Limit rotation rate to achievable turning radius
+            let radians_per_meter = rotation_rps / linear_mps;
+            let actual_rps = if radians_per_meter > Self::MAX_RADIANS_PER_METER {
+                // Turn less to stay in allowed turning radius
+                Self::MAX_RADIANS_PER_METER * linear_mps
+            }
+            else {
+                rotation_rps
             };
-        });
+            
+            // Tell wheels what to do in drive mode
+            self.wheels.iter().for_each(|wheel| {
+                match wheel.drive(linear_mps, actual_rps) {
+                    Err(e) => retval = Err(e),
+                    _ => ()
+                };
+            });
+        }
 
         retval
     }
