@@ -164,13 +164,14 @@ impl<'a> WheelModule {
         let rot_x_mps = speed_mps * self.rot_dir.x;
         let rot_y_mps = speed_mps * self.rot_dir.y;
         let mut ang_rad = rot_y_mps.atan2(rot_x_mps);
+        speed_mps = speed_mps.abs();  // the angle ang_rad works with positive speed.
 
         // Map angles to the valid range
-        if ang_rad < -PI/2.0 {
+        while ang_rad < -PI/2.0 {
             ang_rad += PI;
             speed_mps = -speed_mps;
         }
-        else if ang_rad > PI/2.0 {
+        while ang_rad > PI/2.0 {
             ang_rad -= PI;
             speed_mps = -speed_mps;
         }
@@ -196,7 +197,9 @@ impl<'a> WheelModule {
     fn spin(&self, rotation_rps: f64) -> Result<(), Error> {
         let (speed_mps, ang_rad) = self.spin_speed_angle(rotation_rps);
 
-        println!("spin rot: {rotation_rps} -> speed: {speed_mps}, angle: {ang_rad}");
+        if self.unit == 1 {
+            println!("unit: {}. spin rot: {rotation_rps} -> speed: {speed_mps}, angle: {ang_rad}", self.unit);
+        }
 
         // Write the results to the servo
         self.write_servos(speed_mps, ang_rad)?;
@@ -236,7 +239,7 @@ pub struct DriveTrain {
 }
 
 impl DriveTrain {
-    const MAX_RADIANS_PER_METER: f64 = 1.0;  // TODO: TBD
+    const MAX_RADIANS_PER_METER: f64 = 2.0;  // TODO: TBD
     pub fn new() -> DriveTrain {
 
         let port = serialport::new(SERIAL_PORT, BAUD)
