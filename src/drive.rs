@@ -123,12 +123,53 @@ impl<'a> WheelModule {
         raw_speed
     }
 
+    // returns steering angle and reverse flag.  When reverse is true, the wheel should rotate in the opposite direction.
+    fn drive_angle(&self, curvature: f64) -> (f64, bool) {
+
+        // TODO : Convert this to angle only, using speed of 1.0 to do the calculation.
+        // Get X, Y components of linear speed
+        let lin_x_mps = 1.0;
+        let lin_y_mps = 0.0;
+
+        let rotation_rps = curvature * 1.0;
+
+        // Get X, Y components of rotational speed
+        let rot_mag_mps = rotation_rps * self.radius;  // meters per sec
+        let rot_x_mps = rot_mag_mps * self.rot_dir.x;
+        let rot_y_mps = rot_mag_mps * self.rot_dir.y;
+
+        // Combine linear and rotational components
+        let x_mps = lin_x_mps + rot_x_mps;
+        let y_mps = lin_y_mps + rot_y_mps;
+
+        let mut ang_rad = y_mps.atan2(x_mps);
+        let mut reverse = false;
+
+        // Map angles to the valid range
+        while ang_rad < PI/2.0 {
+            ang_rad += PI;
+            reverse = true;
+        }
+        while ang_rad > PI/2.0 {
+            ang_rad -= PI;
+            reverse = true
+        }
+
+        println!("id: {}, ang: {ang_rad}, reverse: {reverse}", self.unit);
+
+        (ang_rad, reverse)
+    }
+
     // For this wheel module, convert robot's speed (linear [mps] and rotation [rps]
     // into this wheel's speed [mps] and steering direction [radians]
-    fn drive_speed_angle(&self, linear_mps: f64, rotation_rps: f64) -> (f64, f64) {
+    fn drive_speed(&self, linear_mps: f64, curvature: f64, reverse: bool) -> f64 {
+                // TODO : Finish making this speed only.
+
         // Get X, Y components of linear speed
         let lin_x_mps = linear_mps;
         let lin_y_mps = 0.0;
+
+        let rotation_rps = curvature * linear_mps;
 
         // Get X, Y components of rotational speed
         let rot_mag_mps = rotation_rps * self.radius;  // meters per sec
@@ -141,21 +182,13 @@ impl<'a> WheelModule {
 
         // Get speed and angle for this wheel module
         let mut speed_mps = (x_mps*x_mps + y_mps*y_mps).sqrt();
-        let mut ang_rad = y_mps.atan2(x_mps);
-
-        // Map angles to the valid range
-        while ang_rad < PI/2.0 {
-            ang_rad += PI;
-            speed_mps = -speed_mps;
-        }
-        while ang_rad > PI/2.0 {
-            ang_rad -= PI;
+        if reverse {
             speed_mps = -speed_mps;
         }
 
-        println!("id: {}, speed: {speed_mps}, ang: {ang_rad}", self.unit);
+        println!("id: {}, speed: {speed_mps}", self.unit);
 
-        (speed_mps, ang_rad)
+        speed_mps
     }
 
     fn spin_speed_angle(&self, rotation_rps: f64) -> (f64, f64) {
@@ -209,10 +242,12 @@ impl<'a> WheelModule {
 
     // Convert robot speed and rotation into drive speed and steering angle
     // for this wheel module.
-    fn drive(&self, linear_mps: f64, rotation_rps: f64) -> Result<(), Error> {
-        let (speed_mps, ang_rad) = self.drive_speed_angle(linear_mps, rotation_rps);
+    fn drive(&self, linear_mps: f64, curvature: f64) -> Result<(), Error> {
+        // TODO: convert from rotation_rps to curvature
+        let (ang_rad, reverse) = self.drive_angle(curvature);
+        let speed_mps = self.drive_speed(linear_mps, curvature, reverse);
 
-        println!("drive lin: {linear_mps}, rot: {rotation_rps} -> speed: {speed_mps}, angle: {ang_rad}");
+        println!("drive lin: {linear_mps}, curveature: {curvature} -> speed: {speed_mps}, angle: {ang_rad}");
 
         // Write the results to the servo
         self.write_servos(speed_mps, ang_rad)?;
@@ -239,7 +274,7 @@ pub struct DriveTrain {
 }
 
 impl DriveTrain {
-    const MAX_RADIANS_PER_METER: f64 = 2.0;  // TODO: TBD
+    const MAX_CURVATURE: f64 = 2.0;  // TODO: TBD
     pub fn new() -> DriveTrain {
 
         let port = serialport::new(SERIAL_PORT, BAUD)
@@ -303,42 +338,37 @@ impl DriveTrain {
     //   The point about which the robot rotates is at (X=0, Y=turn_radius_m)
     //   Positive turns left, Negative right.  Zero pivots about the robots center
     //   To drive straight, set turn_radius_m to GO_STRAIGHT.
-    pub fn set_speed(&self, linear_mps: f64, rotation_rps: f64) -> Result<(), Error> {
+    pub fn set_speed(&self, linear_mps: f64, curvature: f64) -> Result<(), Error> {
         let mut retval = Ok(());
 
-
-
-        // Check which regime we are operating in: spin or drive.
-        if (linear_mps == 0.0) && (rotation_rps != 0.0) {
-            // Spin
-            // Tell wheels what to do in spin mode
-            self.wheels.iter().for_each(|wheel| {
-                match wheel.spin(rotation_rps) {
-                    Err(e) => retval = Err(e),
-                    _ => ()
-                };
-            });
+        let mut bounded_curvature = curvature;
+        if bounded_curvature > Self::MAX_CURVATURE {
+            bounded_curvature = Self::MAX_CURVATURE;
         }
-        else {
-            // Drive
-            // Limit rotation rate to achievable turning radius
-            let radians_per_meter = rotation_rps / linear_mps;
-            let actual_rps = if radians_per_meter > Self::MAX_RADIANS_PER_METER {
-                // Turn less to stay in allowed turning radius
-                Self::MAX_RADIANS_PER_METER * linear_mps
-            }
-            else {
-                rotation_rps
+        if bounded_curvature < -Self::MAX_CURVATURE {
+            bounded_curvature = -Self::MAX_CURVATURE;
+        }
+        
+        // Tell wheels what to do in drive mode
+        self.wheels.iter().for_each(|wheel| {
+            match wheel.drive(linear_mps, bounded_curvature) {
+                Err(e) => retval = Err(e),
+                _ => ()
             };
-            
-            // Tell wheels what to do in drive mode
-            self.wheels.iter().for_each(|wheel| {
-                match wheel.drive(linear_mps, actual_rps) {
+        });
+
+        retval
+    }
+
+    pub fn set_spin(&self, spin_rps: f64) -> Result<(), Error> {
+        let mut retval = Ok(());
+
+        self.wheels.iter().for_each(|wheel| {
+                match wheel.spin(spin_rps) {
                     Err(e) => retval = Err(e),
                     _ => ()
                 };
             });
-        }
 
         retval
     }
@@ -347,7 +377,7 @@ impl DriveTrain {
         let mut retval = Ok(());
 
         self.wheels.iter().for_each(|wheel| {
-            match wheel.set_powered(false) {
+            match wheel.set_powered(powered) {
                 Err(e) => retval = Err(e),
                 _ => ()
             };

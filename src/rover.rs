@@ -4,8 +4,9 @@ use lx_16a::Lx16aBus;
 use crate::drive::DriveTrain;
 use crate::control_link::ControlLink;
 use serde::{Serialize, Deserialize};
+// use rover::CommandState stuff?
 
-
+/*
 #[derive(Clone, Copy, Default, Debug, Serialize, Deserialize)]
 pub struct RobotVel {
     lin_mps: f32,
@@ -18,6 +19,38 @@ pub enum CommandState {
     Disabled,             // Drive motors off
     Teleop(RobotVel),     // Remote controlled driving
 }
+*/
+
+#[derive(Clone, Copy, Default, Debug, Serialize, Deserialize)]
+pub struct DriveSpeed {
+    lin_mps: f32,
+    curvature: f32,
+}
+
+#[derive(Clone, Copy, Default, Debug, Serialize, Deserialize)]
+pub struct SpinRate {
+    spin_rps: f32,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+pub enum RobotVel {
+    Drive(DriveSpeed),
+    Spin(SpinRate),
+}
+
+impl RobotVel {
+    fn default() -> RobotVel {
+        RobotVel::Drive( DriveSpeed { lin_mps: 0.0, curvature: 0.0 })
+    }
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, Default)]
+pub enum CommandState {
+    #[default]
+    Disabled,
+    Teleop(RobotVel),
+}
+
 
 pub struct Rover<'a> {
     link: &'a ControlLink,
@@ -51,7 +84,15 @@ impl<'a> Rover<'a> {
                         let _ = self.drive.set_powered(true);
                         powered = true;
                     }
-                    let _ = self.drive.set_speed(cmd_vel.lin_mps as f64, cmd_vel.ang_rps as f64);
+                    match cmd_vel {
+                        RobotVel::Drive(ds) => {
+                            let _ = self.drive.set_speed(ds.lin_mps as f64, ds.curvature as f64);
+                        }
+                        RobotVel::Spin(spin) => {
+                            let _ = self.drive.set_spin(spin.spin_rps as f64);
+                        }
+                    }
+                    
                     // println!("Told Drive to go.");
                 }
             }
