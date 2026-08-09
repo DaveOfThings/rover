@@ -10,7 +10,6 @@ use std::time::Instant;
 
 use crate::rover::CommandState;
 
-// Define a struct that mirrors your YAML structure
 #[derive(Debug, Deserialize)]
 struct MqttHost {
     host: String,
@@ -35,7 +34,7 @@ impl ControlLink {
         let filename = "mqtt-server.yml";
         let contents = fs::read_to_string(filename)
             .expect("Could not read mqtt-server.yml file");
-        let host_info: MqttHost = serde_yaml::from_str(&contents)
+        let host_info: MqttHost = serde_yml::from_str(&contents)
             .expect("Could not parse YAML");
 
 	// TODO-DW : Set client_id via .yml file
@@ -66,7 +65,7 @@ impl ControlLink {
             "robot/command_state" => {
                 // Got command / state from controller
                 let mut state = self.state.lock().await;
-                state.command_state = serde_yaml::from_slice::<CommandState>(&msg.payload).expect("Could not parse YAML");
+                state.command_state = serde_json::from_slice::<CommandState>(&msg.payload).expect("Could not parse JSON");
                 // println!("Got command state: {:?}", msg.payload);
             }
             _ => {

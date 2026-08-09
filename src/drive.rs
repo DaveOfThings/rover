@@ -182,6 +182,9 @@ impl<'a> WheelModule {
 
         // Get speed and angle for this wheel module
         let mut speed_mps = (x_mps*x_mps + y_mps*y_mps).sqrt();
+        if linear_mps < 0.0 {
+            speed_mps = -speed_mps;
+        }
         if reverse {
             speed_mps = -speed_mps;
         }
@@ -274,7 +277,7 @@ pub struct DriveTrain {
 }
 
 impl DriveTrain {
-    const MAX_CURVATURE: f64 = 2.0;  // TODO: TBD
+    const MAX_CURVATURE: f64 = 3.0;  // TODO: TBD
     pub fn new() -> DriveTrain {
 
         let port = serialport::new(SERIAL_PORT, BAUD)

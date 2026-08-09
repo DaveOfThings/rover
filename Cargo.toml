@@ -14,4 +14,5 @@ features = "0.10.0"
 full = "0.3.0"
 rumqttc = "0.25.1"
 serde = { version = "1.0.229", features = ["derive"] }
-serde_yaml = "0.9.34"
+serde_json = "1.0.151"
+serde_yml = "0.0.13"
