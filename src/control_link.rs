@@ -10,6 +10,8 @@ use std::time::Instant;
 
 use crate::rover::CommandState;
 
+const LINK_TIMEOUT: Duration = Duration::from_secs(5);
+
 #[derive(Debug, Deserialize)]
 struct MqttHost {
     host: String,
@@ -78,7 +80,13 @@ impl ControlLink {
     pub async fn get_command_state(&self) -> CommandState {
         let link_state = self.state.lock().await;
 
-        link_state.command_state
+        // If heartbeat from teleop station has stopped, command the robot to stop
+        if link_state.last_heartbeat.elapsed() > LINK_TIMEOUT {
+            CommandState::Disabled
+        }
+        else {
+            link_state.command_state
+        }
     }
 
     pub async fn run(&self) {
