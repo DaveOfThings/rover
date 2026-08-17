@@ -72,11 +72,9 @@ impl<'a> Rover<'a> {
             // Get command state from link
             match self.link.get_command_state().await {
                 CommandState::Disabled => {
-                    // println!("Got disabled state from link"); // TODO : Create enum to represent enabled/disabled + speed.
-                    if powered {
-                        let _ = self.drive.set_powered(false);    // TODO : Convert servo controls to async
-                        powered = false;
-                    }
+                    // println!("Got disabled state from link");
+                    let _ = self.drive.set_powered(false);    // TODO : Convert servo controls to async
+                    powered = false;
                 }
                 CommandState::Teleop(cmd_vel) => {
                     // println!("Got teleop state from link");

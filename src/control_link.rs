@@ -10,7 +10,7 @@ use std::time::Instant;
 
 use crate::rover::CommandState;
 
-const LINK_TIMEOUT: Duration = Duration::from_secs(5);
+const LINK_TIMEOUT: Duration = Duration::from_secs(2);
 
 #[derive(Debug, Deserialize)]
 struct MqttHost {
@@ -44,7 +44,7 @@ impl ControlLink {
         mqttoptions.set_credentials(host_info.user, host_info.password);
         mqttoptions.set_keep_alive(Duration::from_secs(5));
 
-        println!("RobotLink starting");
+        // println!("RobotLink starting");
         let (client, eventloop) = AsyncClient::new(mqttoptions, 10);
 
         let state = LinkState { 
@@ -62,7 +62,7 @@ impl ControlLink {
                 // Got heartbeat from robot
                 let mut state = self.state.lock().await;
                 state.last_heartbeat = Instant::now();
-                println!("Updated heartbeat time.");
+                // println!("Updated heartbeat time.");
             }
             "robot/command_state" => {
                 // Got command / state from controller
@@ -78,15 +78,15 @@ impl ControlLink {
     }
 
     pub async fn get_command_state(&self) -> CommandState {
-        let link_state = self.state.lock().await;
+        let mut link_state = self.state.lock().await;
 
         // If heartbeat from teleop station has stopped, command the robot to stop
         if link_state.last_heartbeat.elapsed() > LINK_TIMEOUT {
-            CommandState::Disabled
+            // println!("Heartbeat Timed out");
+            link_state.command_state = CommandState::Disabled
         }
-        else {
-            link_state.command_state
-        }
+
+        link_state.command_state
     }
 
     pub async fn run(&self) {
@@ -108,7 +108,7 @@ impl ControlLink {
                     // Send heartbeat
                     // TODO: Handle error
                     let _ = client.publish("robot/heartbeat", QoS::AtLeastOnce, false, "still alive").await;
-                    println!("heartbeat sent.");
+                    // println!("heartbeat sent.");
                 }
             }
         };
@@ -116,7 +116,7 @@ impl ControlLink {
         // Task to handle MQTT events
         let mqtt_handler = async move {
             // Listen for messages from the robot
-            println!("RobotLink polling event loop");
+            // println!("RobotLink polling event loop");
             let mut eventloop = self.eventloop.lock().await;
             loop {
                 let notification = eventloop.poll().await;

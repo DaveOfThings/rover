@@ -155,7 +155,7 @@ impl<'a> WheelModule {
             reverse = true
         }
 
-        println!("id: {}, ang: {ang_rad}, reverse: {reverse}", self.unit);
+        // println!("id: {}, ang: {ang_rad}, reverse: {reverse}", self.unit);
 
         (ang_rad, reverse)
     }
@@ -189,7 +189,7 @@ impl<'a> WheelModule {
             speed_mps = -speed_mps;
         }
 
-        println!("id: {}, speed: {speed_mps}", self.unit);
+        // println!("id: {}, speed: {speed_mps}", self.unit);
 
         speed_mps
     }
@@ -234,7 +234,7 @@ impl<'a> WheelModule {
         let (speed_mps, ang_rad) = self.spin_speed_angle(rotation_rps);
 
         if self.unit == 1 {
-            println!("unit: {}. spin rot: {rotation_rps} -> speed: {speed_mps}, angle: {ang_rad}", self.unit);
+            // println!("unit: {}. spin rot: {rotation_rps} -> speed: {speed_mps}, angle: {ang_rad}", self.unit);
         }
 
         // Write the results to the servo
@@ -250,7 +250,7 @@ impl<'a> WheelModule {
         let (ang_rad, reverse) = self.drive_angle(curvature);
         let speed_mps = self.drive_speed(linear_mps, curvature, reverse);
 
-        println!("drive lin: {linear_mps}, curveature: {curvature} -> speed: {speed_mps}, angle: {ang_rad}");
+        // println!("drive lin: {linear_mps}, curveature: {curvature} -> speed: {speed_mps}, angle: {ang_rad}");
 
         // Write the results to the servo
         self.write_servos(speed_mps, ang_rad)?;
@@ -259,7 +259,9 @@ impl<'a> WheelModule {
     }
 
     fn set_powered(&self, powered: bool) -> Result<(), Error> {
-        self.drive_servo.set_powered(powered)?;
+        if !powered {
+            self.drive_servo.set_mode(Lx16aMode::Speed(0))?;
+        }
         if let Some(steering) = &self.steering {
             steering.steer_servo.set_powered(powered)?;
         }
@@ -378,6 +380,10 @@ impl DriveTrain {
 
     pub fn set_powered(&self, powered: bool) -> Result<(), Error> {
         let mut retval = Ok(());
+
+        if !powered {
+            // println!("Powering down all servos");   
+        }
 
         self.wheels.iter().for_each(|wheel| {
             match wheel.set_powered(powered) {
