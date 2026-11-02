@@ -1,7 +1,7 @@
-use tokio::sync::mpsc::Sender;
+use tokio::sync::mpsc::{Sender};
 use std::time::Duration;
 use rumqttc::{Event, Incoming, Publish};
-use rumqttc::{MqttOptions, AsyncClient, QoS, EventLoop};
+use rumqttc::{MqttOptions, AsyncClient, QoS, EventLoop, ClientError};
 use serde::Deserialize;
 use tokio::sync::Mutex;
 use std::fs;
@@ -61,8 +61,10 @@ impl ControlLink {
         match msg.topic.as_str() {
             "robot/quit" => {
                 // We've been told to exit the app
-                // TODO : Handle error
-                let _ = self.quit_tx.send(()).await;
+                println!("Got signal to quit.");
+                if let Err(_e) = self.quit_tx.send(()).await {
+                    // Failed to send Quit message.  Log this but carry on.
+                };
             }
             "controller/heartbeat" => {
                 // Got heartbeat from robot
@@ -80,6 +82,7 @@ impl ControlLink {
                 // Ignoring unrecognized topics
                 println!("Ignoring topic: {:?}", msg.topic.as_str());
             }
+
         }
     }
 
@@ -95,12 +98,13 @@ impl ControlLink {
         link_state.command_state
     }
 
-    pub async fn run(&self) {
+    pub async fn run(&self) -> Result<(), ClientError> {
         {
             let client = self.client.lock().await;
 
-            let _ = client.subscribe("controller/heartbeat", QoS::AtMostOnce).await;  // TODO: Handle errors
-            let _ = client.subscribe("robot/command_state", QoS::AtMostOnce).await; // TODO: Handle errors
+            client.subscribe("controller/heartbeat", QoS::AtMostOnce).await?;
+            client.subscribe("robot/command_state", QoS::AtMostOnce).await?;
+            client.subscribe("robot/quit", QoS::AtMostOnce).await?;
         }
 
         // Task to send heartbeats
@@ -112,8 +116,9 @@ impl ControlLink {
                     let client = self.client.lock().await;
 
                     // Send heartbeat
-                    // TODO: Handle error
-                    let _ = client.publish("robot/heartbeat", QoS::AtLeastOnce, false, "still alive").await;
+                    if let Err(_e) = client.publish("robot/heartbeat", QoS::AtLeastOnce, false, "still alive").await {
+                        // Problem sending heartbeat, TODO: log error
+                    }
                     // println!("heartbeat sent.");
                 }
             }
@@ -130,6 +135,7 @@ impl ControlLink {
                     Ok(notification) => {
                         match notification {
                             Event::Incoming(Incoming::Publish(msg)) => {
+                                // Received a message
                                 self.handle_msg(&msg).await;
                             }
                             Event::Outgoing(_) => {
@@ -161,6 +167,8 @@ impl ControlLink {
         }
         
         println!("RobotLink ending");
+
+        Ok(())
     }
 
 }

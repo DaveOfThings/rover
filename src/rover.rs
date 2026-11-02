@@ -39,6 +39,8 @@ impl<'a> Rover<'a> {
         Rover { link, drive }
     }
 
+    // TODO: Fix problem of calling blocking read/write from async domain.
+
     pub async fn run(&self) {
         // Periodically check with the link
         let mut interval = tokio::time::interval(Duration::from_millis(20));
@@ -50,25 +52,32 @@ impl<'a> Rover<'a> {
             match self.link.get_command_state().await {
                 CommandState::Disabled => {
                     // println!("Got disabled state from link");
-                    let _ = self.drive.set_powered(false);    // TODO : Convert servo controls to async
                     powered = false;
+                    if let Err(_e) = self.drive.set_powered(powered) {
+                        // Bus error, TODO: log this.
+                    }
                 }
                 CommandState::Teleop(cmd_vel) => {
                     // println!("Got teleop state from link");
                     if !powered {
-                        let _ = self.drive.set_powered(true);
+                        // Power up, if we were previously powered down
                         powered = true;
+                        if let Err(_e) = self.drive.set_powered(powered) {
+                            // Bus error, TODO: log this.
+                        }
                     }
                     match cmd_vel {
                         RobotVel::Drive(ds) => {
-                            let _ = self.drive.set_speed(ds.lin_mps as f64, ds.curvature as f64);
+                            if let Err(_e) = self.drive.set_speed(ds.lin_mps as f64, ds.curvature as f64) {
+                                // Bus error, TODO: log this
+                            }
                         }
                         RobotVel::Spin(spin) => {
-                            let _ = self.drive.set_spin(spin.spin_rps as f64);
+                            if let Err(_e) = self.drive.set_spin(spin.spin_rps as f64) {
+                                // Bus error, TODO: log this
+                            }
                         }
                     }
-                    
-                    // println!("Told Drive to go.");
                 }
             }
         }

@@ -386,6 +386,4 @@ impl DriveTrain {
         }
         // TODO
     }
-
-    // TODO-DW : Implement some drive functionality
 }
