@@ -1,3 +1,4 @@
+use tokio::sync::mpsc::Sender;
 use std::time::Duration;
 use rumqttc::{Event, Incoming, Publish};
 use rumqttc::{MqttOptions, AsyncClient, QoS, EventLoop};
@@ -26,13 +27,14 @@ pub struct LinkState {
 }
 
 pub struct ControlLink {
+    quit_tx: Sender<()>,
     client: Mutex<AsyncClient>,
     eventloop: Mutex<EventLoop>,
     state: Mutex<LinkState>,
 }
 
 impl ControlLink {
-    pub fn new() -> ControlLink {
+    pub fn new(quit_tx: Sender<()>) -> ControlLink {
         let filename = "mqtt-server.yml";
         let contents = fs::read_to_string(filename)
             .expect("Could not read mqtt-server.yml file");
@@ -51,12 +53,17 @@ impl ControlLink {
             command_state: CommandState::default(),
         };
 
-        ControlLink { client: Mutex::new(client), eventloop: Mutex::new(eventloop), state: Mutex::new(state) }
+        ControlLink { quit_tx, client: Mutex::new(client), eventloop: Mutex::new(eventloop), state: Mutex::new(state) }
     }
 
     pub async fn handle_msg(&self, msg: &Publish) {
         // println!("Received = {:?}", msg);
         match msg.topic.as_str() {
+            "robot/quit" => {
+                // We've been told to exit the app
+                // TODO : Handle error
+                let _ = self.quit_tx.send(()).await;
+            }
             "controller/heartbeat" => {
                 // Got heartbeat from robot
                 let mut state = self.state.lock().await;

@@ -11,10 +11,10 @@ use rover::Rover;
 #[tokio::main]
 async fn main() {    
     // TODO-DW : Arrange for something to send to quit_tx to trigger exit.
-    let (_quit_tx, mut quit_rx) = mpsc::channel::<()>(1);     // signal to shut down. 
+    let (quit_tx, mut quit_rx) = mpsc::channel::<()>(1);     // signal to shut down. 
 
     // Create RobotLink
-    let control_link = ControlLink::new();             // task to manage MQTT link
+    let control_link = ControlLink::new(quit_tx);             // task to manage MQTT link
     let drive = DriveTrain::new();                          // drive subsystem
 
     let rover = Rover::new(&control_link, &drive);     // task to direct robot actions
@@ -35,6 +35,10 @@ async fn main() {
             println!("Drive task quit.");
         }
     };
+
+    // TODO : Error handling
+    let _ = drive.set_speed(0.0, 0.0);
+    let _ = drive.set_powered(false);
 
     println!("All done.");
 }
