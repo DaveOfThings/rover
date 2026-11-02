@@ -39,7 +39,6 @@ impl ControlLink {
         let host_info: MqttHost = serde_yml::from_str(&contents)
             .expect("Could not parse YAML");
 
-	// TODO-DW : Set client_id via .yml file
         let mut mqttoptions = MqttOptions::new("rover2", host_info.host, host_info.port);
         mqttoptions.set_credentials(host_info.user, host_info.password);
         mqttoptions.set_keep_alive(Duration::from_secs(5));

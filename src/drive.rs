@@ -1,4 +1,4 @@
-use std::{io::{Error, Read, Write}, sync::Arc, time::Duration};
+use std::{io::Error, sync::Arc, time::Duration};
 use lx_16a::{Lx16aBus, Lx16a, Lx16aMode};
 use serialport::SerialPort;
 use vector2::Vector2;
@@ -62,10 +62,8 @@ impl Steering {
 }
 
 struct WheelModule {
-    unit: u32,                   // unit number (arbitrary, not necessarily the servo id.)
     drive_servo: Servo,          // drive servo
     steering: Option<Steering>,  // optional steering servo and steering data
-    location: Vector2,
     radius: f64,                 // distance from robot origin
     rot_dir: Vector2,            // unit vector in direction of + rotation for this module
     reverse: bool,               // true if drive servo needs negative speed to go forward
@@ -74,8 +72,7 @@ struct WheelModule {
 
 impl<'a> WheelModule {
     // Construct a Wheel Module
-    fn new( unit: u32,
-            drive_servo: Servo, 
+    fn new( drive_servo: Servo, 
             steer: Option<(Servo, u16)>, // Steering servo and offset
             location: Vector2,
             reverse: bool) -> WheelModule {
@@ -94,7 +91,7 @@ impl<'a> WheelModule {
         };
 
         // Construct the module
-        let module = WheelModule { unit, drive_servo, steering, location, radius, rot_dir, reverse };
+        let module = WheelModule { drive_servo, steering, radius, rot_dir, reverse };
 
         // Set initial mode, position, speed of servos
         module.init_servos();
@@ -220,7 +217,7 @@ impl<'a> WheelModule {
 
 
         self.drive_servo.set_mode(Lx16aMode::Speed(speed_raw))?;
-        if let Some((steering)) = &self.steering {
+        if let Some(steering) = &self.steering {
             let angle_raw = steering.to_raw_angle(angle_rad);
             steering.steer_servo.move_time(angle_raw, TICK_MS)?;
         }
@@ -232,10 +229,6 @@ impl<'a> WheelModule {
     // for this wheel module.
     fn spin(&self, rotation_rps: f64) -> Result<(), Error> {
         let (speed_mps, ang_rad) = self.spin_speed_angle(rotation_rps);
-
-        if self.unit == 1 {
-            // println!("unit: {}. spin rot: {rotation_rps} -> speed: {speed_mps}, angle: {ang_rad}", self.unit);
-        }
 
         // Write the results to the servo
         self.write_servos(speed_mps, ang_rad)?;
@@ -272,10 +265,7 @@ impl<'a> WheelModule {
 }
 
 pub struct DriveTrain {
-    bus: Bus,
     wheels: [WheelModule; 6], // 0 is front right, numbers increase clockwise
-    // linear_speed_mps: f64,
-    // rotation_speed_rps: f64,
 }
 
 impl DriveTrain {
@@ -293,44 +283,38 @@ impl DriveTrain {
         // Wheels are ordered clockwise from front right.
         let wheels = [
             WheelModule::new(
-                1,
                 bus.servo(SERVO_ID_RIGHT_FRONT_DRIVE),
                 Some((bus.servo(SERVO_ID_RIGHT_FRONT_STEER), RIGHT_FRONT_OFFSET)),
                 Vector2::new(FRONT_CORNER_WHEEL_X_M, CORNER_WHEEL_Y_M),
                 true),
             WheelModule::new(
-                2,
                 bus.servo(SERVO_ID_RIGHT_CENTER_DRIVE),
                 None,
                 Vector2::new(MID_WHEEL_X_M, MID_WHEEL_Y_M),
                 true),
             WheelModule::new(
-                3,
                 bus.servo(SERVO_ID_RIGHT_REAR_DRIVE),
                 Some((bus.servo(SERVO_ID_RIGHT_REAR_STEER), RIGHT_BACK_OFFSET)),
                 Vector2::new(BACK_CORNER_WHEEL_X_M, CORNER_WHEEL_Y_M),
                 true),
             WheelModule::new(
-                4,
                 bus.servo(SERVO_ID_LEFT_REAR_DRIVE),
                 Some((bus.servo(SERVO_ID_LEFT_REAR_STEER), LEFT_BACK_OFFSET)),
                 Vector2::new(BACK_CORNER_WHEEL_X_M, -CORNER_WHEEL_Y_M),
                 false),
             WheelModule::new(
-                5,
                 bus.servo(SERVO_ID_LEFT_CENTER_DRIVE),
                 None,
                 Vector2::new(MID_WHEEL_X_M, -MID_WHEEL_Y_M, ),
                 false),
             WheelModule::new(
-                6,
                 bus.servo(SERVO_ID_LEFT_FRONT_DRIVE),
                 Some((bus.servo(SERVO_ID_LEFT_FRONT_STEER), LEFT_FRONT_OFFSET)),
                 Vector2::new(FRONT_CORNER_WHEEL_X_M, -CORNER_WHEEL_Y_M),
                 false),
             ];
 
-        DriveTrain { bus, wheels }
+        DriveTrain { wheels }
     }
 
     // Set speed and turning radius.
