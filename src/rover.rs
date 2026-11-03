@@ -50,21 +50,21 @@ impl<'a> Rover<'a> {
             match self.link.get_command_state().await {
                 CommandState::Disabled => {
                     // println!("Got disabled state from link");
-                    let _ = self.drive.set_powered(false);    // TODO : Convert servo controls to async
+                    let _ = self.drive.set_powered(false).await;    // TODO : Convert servo controls to async
                     powered = false;
                 }
                 CommandState::Teleop(cmd_vel) => {
                     // println!("Got teleop state from link");
                     if !powered {
-                        let _ = self.drive.set_powered(true);
+                        let _ = self.drive.set_powered(true).await;
                         powered = true;
                     }
                     match cmd_vel {
                         RobotVel::Drive(ds) => {
-                            let _ = self.drive.set_speed(ds.lin_mps as f64, ds.curvature as f64);
+                            let _ = self.drive.set_speed(ds.lin_mps as f64, ds.curvature as f64).await;
                         }
                         RobotVel::Spin(spin) => {
-                            let _ = self.drive.set_spin(spin.spin_rps as f64);
+                            let _ = self.drive.set_spin(spin.spin_rps as f64).await;
                         }
                     }
                     

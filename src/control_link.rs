@@ -62,6 +62,7 @@ impl ControlLink {
             "robot/quit" => {
                 // We've been told to exit the app
                 // TODO : Handle error
+                // println!("Got quit message.");
                 let _ = self.quit_tx.send(()).await;
             }
             "controller/heartbeat" => {
@@ -101,6 +102,7 @@ impl ControlLink {
 
             let _ = client.subscribe("controller/heartbeat", QoS::AtMostOnce).await;  // TODO: Handle errors
             let _ = client.subscribe("robot/command_state", QoS::AtMostOnce).await; // TODO: Handle errors
+            let _ = client.subscribe("robot/quit", QoS::AtMostOnce).await;
         }
 
         // Task to send heartbeats
@@ -142,7 +144,7 @@ impl ControlLink {
                                 // println!("Don't need to handle ping responses.");
                             }
                             _ => {
-                                println!("Ignoring notification {:?}", notification);
+                                // println!("Ignoring notification {:?}", notification);
                             }
                         }
                     }

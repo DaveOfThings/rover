@@ -187,7 +187,7 @@ impl<'a> WheelModule {
             speed_mps = -speed_mps;
         }
 
-        // println!("id: {}, speed: {speed_mps}", self.unit);
+        // println!("id: {}, speed: {speed_mps}", 0);
 
         speed_mps
     }
@@ -248,6 +248,7 @@ impl<'a> WheelModule {
 
         // Write the results to the servo
         self.write_servos(speed_mps, ang_rad).await?;
+        // println!("Servos written");
 
         Ok(())
     }
