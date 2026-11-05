@@ -56,6 +56,7 @@ impl ControlLink {
         ControlLink { quit_tx, client: Mutex::new(client), eventloop: Mutex::new(eventloop), state: Mutex::new(state) }
     }
 
+    // Handle incoming MQTT messages
     pub async fn handle_msg(&self, msg: &Publish) {
         // println!("Received = {:?}", msg);
         match msg.topic.as_str() {
@@ -86,6 +87,8 @@ impl ControlLink {
         }
     }
 
+    // Read out command state
+    // (Handles link timeout by returning disabled state)
     pub async fn get_command_state(&self) -> CommandState {
         let mut link_state = self.state.lock().await;
 
@@ -98,7 +101,9 @@ impl ControlLink {
         link_state.command_state
     }
 
+    // Run Control Link task
     pub async fn run(&self) -> Result<(), ClientError> {
+        // Subscribe to MQTT topics
         {
             let client = self.client.lock().await;
 

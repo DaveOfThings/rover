@@ -102,7 +102,7 @@ impl<'a> WheelModule {
 
     // Initialize servos associated with this module
     fn init_servos(&self) {
-        // TODO
+        // Nothing to do, apparently
     }
 
     // Convert meters per second to servo raw units
@@ -192,6 +192,7 @@ impl<'a> WheelModule {
         speed_mps
     }
 
+    // Given desired rotation rate, compute wheel speed and steering angle
     fn spin_speed_angle(&self, rotation_rps: f64) -> (f64, f64) {
         // Get X, Y components of rotational speed
         let mut speed_mps = rotation_rps * self.radius;  // meters per sec
@@ -213,6 +214,7 @@ impl<'a> WheelModule {
         (speed_mps, ang_rad)
     }
 
+    // Convert SI units to servo power and position, then write servo
     async fn write_servos(&self, speed_mps: f64, angle_rad: f64) -> Result<(), Error> {
         let speed_raw = self.to_raw_speed(speed_mps);
 

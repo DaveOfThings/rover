@@ -10,17 +10,19 @@ use rover::Rover;
 
 #[tokio::main]
 async fn main() {    
-    // TODO-DW : Arrange for something to send to quit_tx to trigger exit.
-    let (quit_tx, mut quit_rx) = mpsc::channel::<()>(1);     // signal to shut down. 
+    // Signal the app to exit by writing to quit_tx
+    // (Gamepad menu button triggers this.)
+    let (quit_tx, mut quit_rx) = mpsc::channel::<()>(1);
 
-    // Create RobotLink
-    let control_link = ControlLink::new(quit_tx);             // task to manage MQTT link
-    let drive = DriveTrain::new();                          // drive subsystem
+    // Create RobotLink and DriveTrain
+    let control_link = ControlLink::new(quit_tx);    // task to manage MQTT link
+    let drive = DriveTrain::new();                    // drive subsystem
 
+    // Create Rover to convert MQTT inputs into drive train outputs
     let rover = Rover::new(&control_link, &drive);     // task to direct robot actions
 
 
-    // Run all the tasks.  If one quits, the app ends.
+    // Run all the tasks.  If any one quits, the app ends.
     select! {
         _ = quit_rx.recv() => {
             println!("Quit signalled.");
@@ -36,7 +38,7 @@ async fn main() {
         }
     };
 
-    // TODO : Error handling
+    // TODO : Better Error handling
     let _ = drive.set_speed(0.0, 0.0).await;
     let _ = drive.set_powered(false).await;
 
