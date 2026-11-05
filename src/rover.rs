@@ -50,15 +50,17 @@ impl<'a> Rover<'a> {
             match self.link.get_command_state().await {
                 CommandState::Disabled => {
                     // println!("Got disabled state from link");
-                    let _ = self.drive.set_powered(false).await;
-                    powered = false;
+                    if powered {
+                        powered = false;
+                        let _ = self.drive.set_powered(false).await;
+                    }
                 }
                 CommandState::Teleop(cmd_vel) => {
                     // println!("Got teleop state from link");
                     if !powered {
                         // Power up, if we were previously powered down
-                        let _ = self.drive.set_powered(true).await;
                         powered = true;
+                        let _ = self.drive.set_powered(powered).await;
                     }
                     match cmd_vel {
                         RobotVel::Drive(ds) => {

@@ -271,7 +271,10 @@ pub struct DriveTrain {
 }
 
 impl DriveTrain {
-    const MAX_CURVATURE: f64 = 3.0;  // TODO: TBD
+
+    const MAX_CURVATURE: f64 = 3.0;
+
+    // Create a DriveTrain component
     pub fn new() -> DriveTrain {
 
         /*
@@ -338,13 +341,19 @@ impl DriveTrain {
     pub async fn set_speed(&self, linear_mps: f64, curvature: f64) -> Result<(), Error> {
         let mut retval = Ok(());
 
-        let mut bounded_curvature = curvature;
-        if bounded_curvature > Self::MAX_CURVATURE {
-            bounded_curvature = Self::MAX_CURVATURE;
-        }
-        if bounded_curvature < -Self::MAX_CURVATURE {
-            bounded_curvature = -Self::MAX_CURVATURE;
-        }
+        // Limit curvature to valid range
+        let bounded_curvature = 
+            if curvature > Self::MAX_CURVATURE {
+                Self::MAX_CURVATURE
+            }
+            else {
+                if curvature < -Self::MAX_CURVATURE {
+                    -Self::MAX_CURVATURE
+                }
+                else {
+                    curvature
+                }
+            };
         
         // Tell wheels what to do in drive mode
         for wheel in &self.wheels {
@@ -357,6 +366,8 @@ impl DriveTrain {
         retval
     }
 
+    // Spin in place at a given rate
+    // spin_rps is in radians per second
     pub async fn set_spin(&self, spin_rps: f64) -> Result<(), Error> {
         let mut retval = Ok(());
 
@@ -370,6 +381,7 @@ impl DriveTrain {
         retval
     }
 
+    // Enable or disable power to servos
     pub async fn set_powered(&self, powered: bool) -> Result<(), Error> {
         let mut retval = Ok(());
 
@@ -387,11 +399,11 @@ impl DriveTrain {
         retval        
     }
 
-    
+    // Run the drive task.
+    // (TODO: eliminate this task, which has nothing to do.)
     pub async fn run(&self) {
         loop {
             tokio::time::sleep(Duration::from_secs(1)).await;
         }
-        // TODO
     }
 }
