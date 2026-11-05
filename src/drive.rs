@@ -1,6 +1,7 @@
 use std::{io::Error, sync::Arc, time::Duration};
-use lx_16a::{Lx16aBus, Lx16a, Lx16aMode};
-use serialport::SerialPort;
+use lx_16a::async_lx16a::{AsyncLx16aBus, AsyncLx16a};
+use lx_16a::Lx16aMode;
+use tokio_serial::{SerialPortBuilderExt, SerialStream};
 use vector2::Vector2;
 use std::f64::consts::PI;
 
@@ -41,8 +42,8 @@ const RIGHT_BACK_OFFSET: u16 = 509;              // raw angle of right back, whe
 const LEFT_BACK_OFFSET: u16 = 447;               // raw angle of left back, when straight.
 const LEFT_FRONT_OFFSET: u16 = 564;              // raw angle of left front, when straight.
 
-type Bus = Arc<Lx16aBus<Box<dyn SerialPort>>>;
-type Servo = Lx16a<Box<dyn SerialPort>>;
+type Bus = Arc<AsyncLx16aBus<SerialStream>>;
+type Servo = AsyncLx16a<SerialStream>;
 
 struct Steering {
     steer_servo: Servo,   // servo that controls steering
@@ -186,7 +187,7 @@ impl<'a> WheelModule {
             speed_mps = -speed_mps;
         }
 
-        // println!("id: {}, speed: {speed_mps}", self.unit);
+        // println!("id: {}, speed: {speed_mps}", 0);
 
         speed_mps
     }
@@ -212,14 +213,14 @@ impl<'a> WheelModule {
         (speed_mps, ang_rad)
     }
 
-    fn write_servos(&self, speed_mps: f64, angle_rad: f64) -> Result<(), Error> {
+    async fn write_servos(&self, speed_mps: f64, angle_rad: f64) -> Result<(), Error> {
         let speed_raw = self.to_raw_speed(speed_mps);
 
 
-        self.drive_servo.set_mode(Lx16aMode::Speed(speed_raw))?;
+        self.drive_servo.set_mode(Lx16aMode::Speed(speed_raw)).await?;
         if let Some(steering) = &self.steering {
             let angle_raw = steering.to_raw_angle(angle_rad);
-            steering.steer_servo.move_time(angle_raw, TICK_MS)?;
+            steering.steer_servo.move_time(angle_raw, TICK_MS).await?;
         }
 
         Ok(())
@@ -227,18 +228,18 @@ impl<'a> WheelModule {
 
     // Convert robot speed and rotation into drive speed and steering angle
     // for this wheel module.
-    fn spin(&self, rotation_rps: f64) -> Result<(), Error> {
+    async fn spin(&self, rotation_rps: f64) -> Result<(), Error> {
         let (speed_mps, ang_rad) = self.spin_speed_angle(rotation_rps);
 
         // Write the results to the servo
-        self.write_servos(speed_mps, ang_rad)?;
+        self.write_servos(speed_mps, ang_rad).await?;
 
         Ok(())
     }
 
     // Convert robot speed and rotation into drive speed and steering angle
     // for this wheel module.
-    fn drive(&self, linear_mps: f64, curvature: f64) -> Result<(), Error> {
+    async fn drive(&self, linear_mps: f64, curvature: f64) -> Result<(), Error> {
         // TODO: convert from rotation_rps to curvature
         let (ang_rad, reverse) = self.drive_angle(curvature);
         let speed_mps = self.drive_speed(linear_mps, curvature, reverse);
@@ -246,17 +247,18 @@ impl<'a> WheelModule {
         // println!("drive lin: {linear_mps}, curveature: {curvature} -> speed: {speed_mps}, angle: {ang_rad}");
 
         // Write the results to the servo
-        self.write_servos(speed_mps, ang_rad)?;
+        self.write_servos(speed_mps, ang_rad).await?;
+        // println!("Servos written");
 
         Ok(())
     }
 
-    fn set_powered(&self, powered: bool) -> Result<(), Error> {
+    async fn set_powered(&self, powered: bool) -> Result<(), Error> {
         if !powered {
-            self.drive_servo.set_mode(Lx16aMode::Speed(0))?;
+            self.drive_servo.set_mode(Lx16aMode::Speed(0)).await?;
         }
         if let Some(steering) = &self.steering {
-            steering.steer_servo.set_powered(powered)?;
+            steering.steer_servo.set_powered(powered).await?;
         }
 
         Ok(())
@@ -272,12 +274,18 @@ impl DriveTrain {
     const MAX_CURVATURE: f64 = 3.0;  // TODO: TBD
     pub fn new() -> DriveTrain {
 
+        /*
         let port = serialport::new(SERIAL_PORT, BAUD)
             .timeout(Duration::from_millis(10))
             .open()
             .expect("Failed to open port");
+        */
 
-        let bus: Bus = Arc::new(Lx16aBus::new(port));
+        let stream = tokio_serial::new(SERIAL_PORT, BAUD)
+            .open_native_async()
+            .unwrap();
+
+        let bus: Bus = Arc::new(AsyncLx16aBus::new(stream));
 
         // Create Lx16a servos and organize them into units.
         // Wheels are ordered clockwise from front right.
@@ -327,7 +335,7 @@ impl DriveTrain {
     //   The point about which the robot rotates is at (X=0, Y=turn_radius_m)
     //   Positive turns left, Negative right.  Zero pivots about the robots center
     //   To drive straight, set turn_radius_m to GO_STRAIGHT.
-    pub fn set_speed(&self, linear_mps: f64, curvature: f64) -> Result<(), Error> {
+    pub async fn set_speed(&self, linear_mps: f64, curvature: f64) -> Result<(), Error> {
         let mut retval = Ok(());
 
         let mut bounded_curvature = curvature;
@@ -339,42 +347,42 @@ impl DriveTrain {
         }
         
         // Tell wheels what to do in drive mode
-        self.wheels.iter().for_each(|wheel| {
-            match wheel.drive(linear_mps, bounded_curvature) {
+        for wheel in &self.wheels {
+            match wheel.drive(linear_mps, bounded_curvature).await {
                 Err(e) => retval = Err(e),
                 _ => ()
             };
-        });
+        }
 
         retval
     }
 
-    pub fn set_spin(&self, spin_rps: f64) -> Result<(), Error> {
+    pub async fn set_spin(&self, spin_rps: f64) -> Result<(), Error> {
         let mut retval = Ok(());
 
-        self.wheels.iter().for_each(|wheel| {
-                match wheel.spin(spin_rps) {
-                    Err(e) => retval = Err(e),
-                    _ => ()
-                };
-            });
+        for wheel in &self.wheels {
+            match wheel.spin(spin_rps).await {
+                Err(e) => retval = Err(e),
+                _ => ()
+            };
+        }
 
         retval
     }
 
-    pub fn set_powered(&self, powered: bool) -> Result<(), Error> {
+    pub async fn set_powered(&self, powered: bool) -> Result<(), Error> {
         let mut retval = Ok(());
 
         if !powered {
             // println!("Powering down all servos");   
         }
 
-        self.wheels.iter().for_each(|wheel| {
-            match wheel.set_powered(powered) {
+        for wheel in &self.wheels {
+            match wheel.set_powered(powered).await {
                 Err(e) => retval = Err(e),
                 _ => ()
             };
-        });
+        }
 
         retval        
     }

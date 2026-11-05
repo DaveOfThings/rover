@@ -39,8 +39,6 @@ impl<'a> Rover<'a> {
         Rover { link, drive }
     }
 
-    // TODO: Fix problem of calling blocking read/write from async domain.
-
     pub async fn run(&self) {
         // Periodically check with the link
         let mut interval = tokio::time::interval(Duration::from_millis(20));
@@ -52,30 +50,22 @@ impl<'a> Rover<'a> {
             match self.link.get_command_state().await {
                 CommandState::Disabled => {
                     // println!("Got disabled state from link");
+                    let _ = self.drive.set_powered(false).await;
                     powered = false;
-                    if let Err(_e) = self.drive.set_powered(powered) {
-                        // Bus error, TODO: log this.
-                    }
                 }
                 CommandState::Teleop(cmd_vel) => {
                     // println!("Got teleop state from link");
                     if !powered {
                         // Power up, if we were previously powered down
+                        let _ = self.drive.set_powered(true).await;
                         powered = true;
-                        if let Err(_e) = self.drive.set_powered(powered) {
-                            // Bus error, TODO: log this.
-                        }
                     }
                     match cmd_vel {
                         RobotVel::Drive(ds) => {
-                            if let Err(_e) = self.drive.set_speed(ds.lin_mps as f64, ds.curvature as f64) {
-                                // Bus error, TODO: log this
-                            }
+                            let _ = self.drive.set_speed(ds.lin_mps as f64, ds.curvature as f64).await;
                         }
                         RobotVel::Spin(spin) => {
-                            if let Err(_e) = self.drive.set_spin(spin.spin_rps as f64) {
-                                // Bus error, TODO: log this
-                            }
+                            let _ = self.drive.set_spin(spin.spin_rps as f64).await;
                         }
                     }
                 }

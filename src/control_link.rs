@@ -148,7 +148,7 @@ impl ControlLink {
                                 // println!("Don't need to handle ping responses.");
                             }
                             _ => {
-                                println!("Ignoring notification {:?}", notification);
+                                // println!("Ignoring notification {:?}", notification);
                             }
                         }
                     }

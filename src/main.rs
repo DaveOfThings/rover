@@ -37,8 +37,8 @@ async fn main() {
     };
 
     // TODO : Error handling
-    let _ = drive.set_speed(0.0, 0.0);
-    let _ = drive.set_powered(false);
+    let _ = drive.set_speed(0.0, 0.0).await;
+    let _ = drive.set_powered(false).await;
 
     println!("All done.");
 }
